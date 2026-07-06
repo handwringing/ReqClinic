@@ -58,7 +58,7 @@ export const metadata: Metadata = {
   title: 'Requirements Clinic',
   description: '通过连续追问整理需求',
   icons: {
-    icon: '/icon.svg',
+    icon: process.env.GITHUB_PAGES === 'true' ? '/ReqClinic/icon.svg' : '/icon.svg',
   },
 };
 
