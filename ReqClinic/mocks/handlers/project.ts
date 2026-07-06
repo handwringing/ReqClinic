@@ -4,10 +4,22 @@ import type { UUID, Project, ProjectMember, DeleteTask, AiJob } from '@/lib/api/
 import { generateUUID } from '@/lib/utils/id';
 import { ApiClientError } from '@/lib/api/errors';
 import { asterFixture } from './_fixtures';
+import {
+  FORMAL_CUSTOM_PROJECT_ID,
+  FORMAL_STATIC_CASE_IDS,
+  formalStaticProjectId,
+  staticFormalProjectSourceCase,
+} from '@/lib/static-demo-ids';
 
 // 正式项目 Mock：创建（异步）、读取、更新、删除、成员管理。
 
 const ASTER_PROJECT_ID = '00000000-0000-4000-8000-000000000100';
+
+const FORMAL_SAMPLE_TITLES: Record<string, string> = {
+  aster: '园区访客预约与通行',
+  outsourcing: '企业官网外包采购',
+  capstone: '智能面试助手毕业设计',
+};
 
 function getProjects(store: MockSessionStore): Record<string, Project> {
   return store.get<Record<string, Project>>('projects') ?? {};
@@ -49,6 +61,38 @@ function asterProject(): Project | null {
   };
 }
 
+function staticProject(projectId: string): Project | null {
+  const sourceCaseId = staticFormalProjectSourceCase(projectId);
+  const now = '2026-07-07T00:00:00.000Z';
+  if (sourceCaseId) {
+    return {
+      id: projectId,
+      title: FORMAL_SAMPLE_TITLES[sourceCaseId] ?? '正式项目示例',
+      status: 'reviewing',
+      source_kind: projectId.startsWith('formal-upgrade-') ? 'quick_upgrade' : 'sample',
+      source_case_id: FORMAL_STATIC_CASE_IDS.includes(sourceCaseId as any) ? sourceCaseId : null,
+      version: 1,
+      created_by: '00000000-0000-4000-8000-000000000099',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+  if (projectId === FORMAL_CUSTOM_PROJECT_ID) {
+    return {
+      id: projectId,
+      title: '自定义项目示例',
+      status: 'reviewing',
+      source_kind: 'custom',
+      source_case_id: null,
+      version: 1,
+      created_by: '00000000-0000-4000-8000-000000000099',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+  return null;
+}
+
 export function registerProjectHandlers(registry: MockRouteRegistry, store: MockSessionStore): void {
   registry.register('createProject', async (request: {
     title: string;
@@ -58,7 +102,10 @@ export function registerProjectHandlers(registry: MockRouteRegistry, store: Mock
   }) => {
     // 创建并持久化新项目，返回 202 + job_id（符合异步创建契约）。
     const now = new Date().toISOString();
-    const projectId = generateUUID();
+    const projectId =
+      request.source_kind === 'sample' && request.source_case_id
+        ? formalStaticProjectId(request.source_case_id)
+        : FORMAL_CUSTOM_PROJECT_ID;
     const project: Project = {
       id: projectId,
       title: request.title,
@@ -88,6 +135,8 @@ export function registerProjectHandlers(registry: MockRouteRegistry, store: Mock
       const ap = asterProject();
       if (ap) return ap;
     }
+    const staticFallback = staticProject(request.id);
+    if (staticFallback) return staticFallback;
     throw new ApiClientError(404, 'NOT_FOUND', '项目不存在', generateUUID());
   });
 

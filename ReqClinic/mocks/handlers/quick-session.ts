@@ -23,6 +23,7 @@ import type {
 import { generateUUID } from '@/lib/utils/id';
 import { ApiClientError } from '@/lib/api/errors';
 import { buildQuickDemoFixture, getQuickDemoCase, quickDemoCardTitle } from '@/lib/quick-demo-cases';
+import { formalQuickUpgradeProjectId, quickStaticSessionId } from '@/lib/static-demo-ids';
 
 // 快速问诊 Mock（21 端点）。
 // sample 案例：从快速问诊案例注册表载入预生成脚本。
@@ -605,8 +606,12 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
     }) => {
       const now = nowIso();
       const sourceKind: QuickSessionSourceKind = request.source_kind ?? 'custom';
+      const id =
+        sourceKind === 'sample' && request.source_case_id
+          ? quickStaticSessionId(request.source_case_id)
+          : generateUUID();
       const session: QuickSession = {
-        id: generateUUID(),
+        id,
         version: 1,
         status: 'clarifying',
         source_kind: sourceKind,
@@ -1054,7 +1059,10 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
     async (request: { session_id: UUID; title: string }) => {
       const session = store.getQuickSession(request.session_id);
       const now = nowIso();
-      const projectId = generateUUID();
+      const projectId =
+        session?.source_kind === 'sample' && session.source_case_id
+          ? formalQuickUpgradeProjectId(session.source_case_id)
+          : generateUUID();
       if (session) {
         const updated: QuickSession = { ...session, status: 'upgraded', updated_at: nowIso() };
         store.setQuickSession(updated);

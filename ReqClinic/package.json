@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "cross-env NEXT_BUILD_OUTPUT=.next-build next build",
+    "build:pages": "cross-env GITHUB_PAGES=true GITHUB_PAGES_REPO=ReqClinic NEXT_PUBLIC_API_TRANSPORT=mock next build",
     "start": "cross-env NEXT_BUILD_OUTPUT=.next-build next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"

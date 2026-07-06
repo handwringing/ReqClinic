@@ -10,6 +10,11 @@ import type {
 import { generateUUID } from '@/lib/utils/id';
 import { ApiClientError } from '@/lib/api/errors';
 import { trainingFixture } from './_fixtures';
+import {
+  staticTrainingAttemptCase,
+  trainingRetryAttemptId,
+  trainingStaticAttemptId,
+} from '@/lib/static-demo-ids';
 
 // 表达训练 Mock：案例列表、尝试、提问/总结（异步）、反馈、重试、完成。
 
@@ -110,7 +115,10 @@ export function registerTrainingHandlers(registry: MockRouteRegistry, store: Moc
     source_kind?: TrainingAttempt['source_kind'];
   }) => {
     const attempt: TrainingAttempt = {
-      attempt_id: generateUUID(),
+      attempt_id:
+        request.source_kind === 'sample'
+          ? trainingStaticAttemptId(request.case_id)
+          : generateUUID(),
       case_id: request.case_id,
       case_version: request.case_version,
       source_kind: request.source_kind ?? 'sample',
@@ -127,7 +135,23 @@ export function registerTrainingHandlers(registry: MockRouteRegistry, store: Moc
 
   registry.register('getTrainingAttempt', async (request: { id: UUID }) => {
     const attempts = getAttempts(store);
-    const attempt = attempts[request.id];
+    let attempt = attempts[request.id];
+    if (!attempt) {
+      const caseId = staticTrainingAttemptCase(request.id);
+      const foundCase = caseId ? cases().find((item) => item.id === caseId) : null;
+      if (foundCase) {
+        attempt = {
+          attempt_id: request.id,
+          case_id: foundCase.id,
+          case_version: foundCase.version,
+          source_kind: 'sample',
+          status: request.id.startsWith('training-retry-') ? 'interviewing' : 'interviewing',
+          question_count: 0,
+          started_at: new Date().toISOString(),
+          completed_at: null,
+        };
+      }
+    }
     if (!attempt) {
       throw new ApiClientError(404, 'NOT_FOUND', '训练尝试不存在', generateUUID());
     }
@@ -202,7 +226,7 @@ export function registerTrainingHandlers(registry: MockRouteRegistry, store: Moc
       throw new ApiClientError(404, 'NOT_FOUND', '训练尝试不存在', generateUUID());
     }
     const attempt: TrainingAttempt = {
-      attempt_id: generateUUID(),
+      attempt_id: trainingRetryAttemptId(prior.case_id),
       case_id: prior.case_id,
       case_version: prior.case_version,
       source_kind: prior.source_kind ?? 'sample',
