@@ -24,6 +24,7 @@ import {
   quickDemoReview,
   quickDemoSupplement,
 } from '@/lib/quick-demo-cases';
+import { withSiteBasePath } from '@/lib/site-path';
 import type { QuickCardBinding } from './quick-visualization';
 
 const MAX_LENGTH = 10000;
@@ -533,7 +534,7 @@ function StageActionPanel({
         </p>
         {actionHref && !disabled ? (
           <a
-            href={actionHref}
+            href={withSiteBasePath(actionHref)}
             className="app-btn-primary"
             style={{ padding: '8px 14px', fontSize: 12, textDecoration: 'none' }}
           >
