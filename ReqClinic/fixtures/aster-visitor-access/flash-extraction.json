@@ -1,0 +1,210 @@
+{
+  "case_id": "aster-visitor-access",
+  "project_id": "ast_project_001",
+  "extracted_at": "2026-07-02T11:00:00+08:00",
+  "outcomes": [
+    {
+      "id": "ast_outcome_o1",
+      "project_id": "ast_project_001",
+      "code": "O1",
+      "title": "访客可自助预约通行",
+      "description": "访客能够通过线上入口自主填写预约信息并获取通行凭证，无需现场排队登记。",
+      "status": "confirmed",
+      "version": 1,
+      "owner_id": "ast_member_001",
+      "evidence_refs": ["ast_evidence_002"]
+    },
+    {
+      "id": "ast_outcome_o2",
+      "project_id": "ast_project_001",
+      "code": "O2",
+      "title": "安保可批量审批访客",
+      "description": "安保人员能够对待处理预约进行批量预审，对异常记录逐个确认，提升审批效率。",
+      "status": "confirmed",
+      "version": 1,
+      "owner_id": "ast_member_003",
+      "evidence_refs": ["ast_evidence_003"]
+    },
+    {
+      "id": "ast_outcome_o3",
+      "project_id": "ast_project_001",
+      "code": "O3",
+      "title": "访客凭证码扫码通行",
+      "description": "访客在出入口出示二维码凭证，由扫码设备核验后放行，凭证可追溯。",
+      "status": "confirmed",
+      "version": 1,
+      "owner_id": "ast_member_003",
+      "evidence_refs": ["ast_evidence_004", "ast_evidence_006"]
+    },
+    {
+      "id": "ast_outcome_o4",
+      "project_id": "ast_project_001",
+      "code": "O4",
+      "title": "管理方可查看通行记录",
+      "description": "管理方与安保可查看、导出通行记录，用于审计与合规追溯。",
+      "status": "confirmed",
+      "version": 1,
+      "owner_id": "ast_member_001",
+      "evidence_refs": ["ast_evidence_005"]
+    }
+  ],
+  "drivers": [
+    {
+      "id": "ast_driver_d1",
+      "project_id": "ast_project_001",
+      "code": "D1",
+      "title": "提升访客体验",
+      "description": "减少访客现场排队登记时间，提供便捷的自助预约入口。",
+      "status": "confirmed",
+      "version": 1
+    },
+    {
+      "id": "ast_driver_d2",
+      "project_id": "ast_project_001",
+      "code": "D2",
+      "title": "降低安保工作量",
+      "description": "通过批量审批与扫码核验，降低安保人工登记与逐个核对的工作量。",
+      "status": "confirmed",
+      "version": 1
+    },
+    {
+      "id": "ast_driver_d3",
+      "project_id": "ast_project_001",
+      "code": "D3",
+      "title": "满足合规审计要求",
+      "description": "留存可追溯的通行记录，满足园区安全合规与审计追溯要求。",
+      "status": "confirmed",
+      "version": 1
+    }
+  ],
+  "requirements": [
+    {
+      "id": "ast_req_r1",
+      "project_id": "ast_project_001",
+      "code": "R1",
+      "title": "访客在线填写预约信息",
+      "description": "访客通过网页或小程序填写姓名、手机号、被访人、到访时段等信息提交预约。",
+      "tier": "now",
+      "status": "confirmed",
+      "version": 1,
+      "outcome_id": "ast_outcome_o1"
+    },
+    {
+      "id": "ast_req_r2",
+      "project_id": "ast_project_001",
+      "code": "R2",
+      "title": "安保批量审批待处理预约",
+      "description": "安保可在后台对待处理预约进行批量预审，标记异常的逐个确认。",
+      "tier": "now",
+      "status": "confirmed",
+      "version": 1,
+      "outcome_id": "ast_outcome_o2"
+    },
+    {
+      "id": "ast_req_r3",
+      "project_id": "ast_project_001",
+      "code": "R3",
+      "title": "生成访客凭证码（二维码）",
+      "description": "预约审批通过后，系统生成与预约绑定的二维码凭证供访客出示。",
+      "tier": "now",
+      "status": "confirmed",
+      "version": 1,
+      "outcome_id": "ast_outcome_o3"
+    },
+    {
+      "id": "ast_req_r4",
+      "project_id": "ast_project_001",
+      "code": "R4",
+      "title": "出入口扫码核验通行",
+      "description": "3个出入口配置扫码设备，核验二维码有效性后放行并记录通行。",
+      "tier": "now",
+      "status": "confirmed",
+      "version": 1,
+      "outcome_id": "ast_outcome_o3"
+    },
+    {
+      "id": "ast_req_r5",
+      "project_id": "ast_project_001",
+      "code": "R5",
+      "title": "人脸识别辅助核验",
+      "description": "在二维码核验基础上，增加人脸识别作为辅助核验手段，提升人证一致性。",
+      "tier": "next",
+      "status": "proposed",
+      "version": 1,
+      "outcome_id": "ast_outcome_o3"
+    },
+    {
+      "id": "ast_req_r6",
+      "project_id": "ast_project_001",
+      "code": "R6",
+      "title": "通行记录实时上报",
+      "description": "出入口通行记录实时上报至安保管理平台，支持实时监控与告警。",
+      "tier": "next",
+      "status": "proposed",
+      "version": 1,
+      "outcome_id": "ast_outcome_o4"
+    },
+    {
+      "id": "ast_req_r7",
+      "project_id": "ast_project_001",
+      "code": "R7",
+      "title": "访客黑名单管理",
+      "description": "维护访客黑名单，对黑名单人员预约进行拦截或告警。",
+      "tier": "later",
+      "status": "draft",
+      "version": 1,
+      "outcome_id": "ast_outcome_o2"
+    },
+    {
+      "id": "ast_req_r8",
+      "project_id": "ast_project_001",
+      "code": "R8",
+      "title": "与楼宇门禁系统集成",
+      "description": "将访客通行凭证与楼宇门禁系统打通，实现一次凭证园区内通用。",
+      "tier": "watch",
+      "status": "draft",
+      "version": 1,
+      "outcome_id": "ast_outcome_o4"
+    }
+  ],
+  "conflicts": [
+    {
+      "id": "ast_conflict_c1",
+      "project_id": "ast_project_001",
+      "code": "C1",
+      "statement": "“下个月上线”与“人脸识别需要采购硬件并训练数据”存在时间冲突",
+      "severity": "blocking",
+      "status": "resolved",
+      "version": 1,
+      "parties": [
+        {
+          "viewpoint": "管理方希望下个月峰会前上线，含人脸识别功能",
+          "evidence_refs": ["ast_evidence_002", "ast_evidence_007"]
+        },
+        {
+          "viewpoint": "IT部门表示人脸识别需采购硬件并训练模型，一个月内无法完成",
+          "evidence_refs": ["ast_evidence_004"]
+        }
+      ]
+    },
+    {
+      "id": "ast_conflict_c2",
+      "project_id": "ast_project_001",
+      "code": "C2",
+      "statement": "“批量审批”与“安保希望逐个确认”在审批粒度上存在分歧",
+      "severity": "major",
+      "status": "resolved",
+      "version": 1,
+      "parties": [
+        {
+          "viewpoint": "管理方要求支持批量审批以提升效率",
+          "evidence_refs": ["ast_evidence_001"]
+        },
+        {
+          "viewpoint": "安保担心一次性放行过多有风险，希望异常的逐个确认",
+          "evidence_refs": ["ast_evidence_003"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "case_id": "aster-visitor-access",
+  "fixture_schema_version": "1.0.0",
+  "entry_stage": "formal_ingest",
+  "files": [
+    { "path": "scenario.json", "sha256": "placeholder" },
+    { "path": "stakeholders.json", "sha256": "placeholder" },
+    { "path": "dialogue-nodes.json", "sha256": "placeholder" },
+    { "path": "evidence.json", "sha256": "placeholder" },
+    { "path": "flash-extraction.json", "sha256": "placeholder" },
+    { "path": "conflicts.json", "sha256": "placeholder" },
+    { "path": "decisions.json", "sha256": "placeholder" },
+    { "path": "requirements.json", "sha256": "placeholder" },
+    { "path": "change-impact.json", "sha256": "placeholder" },
+    { "path": "report.json", "sha256": "placeholder" }
+  ],
+  "required_features": ["formal_analysis"]
+}

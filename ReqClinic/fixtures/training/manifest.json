@@ -1,0 +1,10 @@
+{
+  "case_id": "training-stakeholder-interview",
+  "fixture_schema_version": "1.0.0",
+  "entry_stage": "training",
+  "files": [
+    { "path": "case.json", "sha256": "placeholder" },
+    { "path": "feedback-template.json", "sha256": "placeholder" }
+  ],
+  "required_features": ["training"]
+}

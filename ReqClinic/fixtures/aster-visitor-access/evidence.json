@@ -1,0 +1,62 @@
+{
+  "case_id": "aster-visitor-access",
+  "project_id": "ast_project_001",
+  "spans": [
+    {
+      "id": "ast_evidence_001",
+      "source_id": "ast_source_001",
+      "text": "园区有3个出入口，每天访客量约500人，需要支持批量审批",
+      "location": { "start": 0, "end": 28 },
+      "speaker": null,
+      "timestamp": "2026-07-02T10:05:00+08:00"
+    },
+    {
+      "id": "ast_evidence_002",
+      "source_id": "ast_dialogue_002",
+      "text": "下个月园区要承办一场大型行业峰会，预计单日访客量会翻倍到1000人。现有纸质登记流程根本扛不住",
+      "location": { "start": 0, "end": 38 },
+      "speaker": "周敏",
+      "timestamp": "2026-07-02T10:31:00+08:00"
+    },
+    {
+      "id": "ast_evidence_003",
+      "source_id": "ast_dialogue_004",
+      "text": "审批上我们希望能批量处理，但也担心一次性放行太多有风险，理想情况是能批量预审、异常的再逐个确认",
+      "location": { "start": 0, "end": 44 },
+      "speaker": "王磊",
+      "timestamp": "2026-07-02T10:36:00+08:00"
+    },
+    {
+      "id": "ast_evidence_004",
+      "source_id": "ast_dialogue_006",
+      "text": "如果要上人脸识别，需要采购新硬件并训练模型，一个月内很难完成。我的建议是首版先用二维码凭证通行",
+      "location": { "start": 0, "end": 42 },
+      "speaker": "张伟",
+      "timestamp": "2026-07-02T10:41:00+08:00"
+    },
+    {
+      "id": "ast_evidence_005",
+      "source_id": "ast_dialogue_006",
+      "text": "通行数据要能对接到我们现有的安保管理平台",
+      "location": { "start": 0, "end": 22 },
+      "speaker": "张伟",
+      "timestamp": "2026-07-02T10:41:00+08:00"
+    },
+    {
+      "id": "ast_evidence_006",
+      "source_id": "ast_dialogue_008",
+      "text": "人脸识别是加分项不是必须项。我们真正必须的是：每个访客有可追溯的凭证，安保能核验人证一致",
+      "location": { "start": 0, "end": 40 },
+      "speaker": "王磊",
+      "timestamp": "2026-07-02T10:46:00+08:00"
+    },
+    {
+      "id": "ast_evidence_007",
+      "source_id": "ast_source_001",
+      "text": "最好下个月上线，支持人脸识别的访客预约系统",
+      "location": { "start": 28, "end": 50 },
+      "speaker": null,
+      "timestamp": "2026-07-02T10:05:00+08:00"
+    }
+  ]
+}

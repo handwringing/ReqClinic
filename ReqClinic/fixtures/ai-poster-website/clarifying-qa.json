@@ -1,0 +1,127 @@
+{
+  "case_id": "ai-poster-website",
+  "session_id": "apw_session_001",
+  "turns": [
+    {
+      "id": "apw_turn_001",
+      "session_id": "apw_session_001",
+      "role": "assistant",
+      "content": "我先确认一下你说的“海报”指什么。你希望生成的是一个可以在线访问的网页（手机扫码即可打开），还是一张可供下载的图片文件？",
+      "structured_content": {
+        "paragraphs": [
+          "我先确认一下你说的“海报”指什么。你希望生成的是一个可以在线访问的网页（手机扫码即可打开），还是一张可供下载的图片文件？"
+        ],
+        "highlights": ["网页", "图片文件"]
+      },
+      "source_refs": ["scenario.json#original_input"],
+      "update_marks": [],
+      "follow_ups": ["确认海报交付形态"],
+      "created_at": "2026-07-02T09:01:00+08:00"
+    },
+    {
+      "id": "apw_turn_002",
+      "session_id": "apw_session_001",
+      "role": "user",
+      "content": "是网页，扫码就能看，不用下载图片。",
+      "structured_content": {
+        "paragraphs": ["是网页，扫码就能看，不用下载图片。"],
+        "highlights": ["网页"]
+      },
+      "source_refs": [],
+      "update_marks": ["expected_outcome=网页海报"],
+      "follow_ups": [],
+      "created_at": "2026-07-02T09:01:30+08:00"
+    },
+    {
+      "id": "apw_turn_003",
+      "session_id": "apw_session_001",
+      "role": "assistant",
+      "content": "明白，交付物是网页。那么这个网站主要给谁用？是团队内部宣传岗同事批量出海报，还是面向个人创作者自助生成？",
+      "structured_content": {
+        "paragraphs": [
+          "明白，交付物是网页。",
+          "那么这个网站主要给谁用？是团队内部宣传岗同事批量出海报，还是面向个人创作者自助生成？"
+        ],
+        "highlights": ["团队内部宣传岗", "个人创作者"]
+      },
+      "source_refs": ["apw_turn_002"],
+      "update_marks": [],
+      "follow_ups": ["确认主要使用者"],
+      "created_at": "2026-07-02T09:02:00+08:00"
+    },
+    {
+      "id": "apw_turn_004",
+      "session_id": "apw_session_001",
+      "role": "user",
+      "content": "主要是团队宣传岗的同事，个人创作者是次要的。",
+      "structured_content": {
+        "paragraphs": ["主要是团队宣传岗的同事，个人创作者是次要的。"],
+        "highlights": ["团队宣传岗为主"]
+      },
+      "source_refs": [],
+      "update_marks": ["target_user=团队宣传岗为主"],
+      "follow_ups": [],
+      "created_at": "2026-07-02T09:02:30+08:00"
+    },
+    {
+      "id": "apw_turn_005",
+      "session_id": "apw_session_001",
+      "role": "assistant",
+      "content": "你提到“30秒内能出结果”，这个30秒是指从输入到海报生成完成的时间，还是指生成完后在手机上首次打开看到画面的时间？",
+      "structured_content": {
+        "paragraphs": [
+          "你提到“30秒内能出结果”，这个30秒是指从输入到海报生成完成的时间，还是指生成完后在手机上首次打开看到画面的时间？"
+        ],
+        "highlights": ["生成时间", "访问时间"]
+      },
+      "source_refs": ["scenario.json#original_input"],
+      "update_marks": [],
+      "follow_ups": ["确认完成判断口径"],
+      "created_at": "2026-07-02T09:03:00+08:00"
+    },
+    {
+      "id": "apw_turn_006",
+      "session_id": "apw_session_001",
+      "role": "user",
+      "content": "是生成时间，从输入完那句话到海报出来不超过30秒。",
+      "structured_content": {
+        "paragraphs": ["是生成时间，从输入完那句话到海报出来不超过30秒。"],
+        "highlights": ["生成时间", "30秒"]
+      },
+      "source_refs": [],
+      "update_marks": ["completion_criteria=生成时间≤30秒"],
+      "follow_ups": [],
+      "created_at": "2026-07-02T09:03:30+08:00"
+    },
+    {
+      "id": "apw_turn_007",
+      "session_id": "apw_session_001",
+      "role": "assistant",
+      "content": "最后一个问题：生成出来的海报，是否需要支持多人协作编辑或二次修改？这会影响是否要做编辑器和权限体系。",
+      "structured_content": {
+        "paragraphs": [
+          "最后一个问题：生成出来的海报，是否需要支持多人协作编辑或二次修改？这会影响是否要做编辑器和权限体系。"
+        ],
+        "highlights": ["协作编辑", "二次修改", "权限体系"]
+      },
+      "source_refs": [],
+      "update_marks": [],
+      "follow_ups": ["确认协作与二次修改约束"],
+      "created_at": "2026-07-02T09:04:00+08:00"
+    },
+    {
+      "id": "apw_turn_008",
+      "session_id": "apw_session_001",
+      "role": "user",
+      "content": "暂时不需要，能一次生成够用就行。",
+      "structured_content": {
+        "paragraphs": ["暂时不需要，能一次生成够用就行。"],
+        "highlights": ["暂时不需要"]
+      },
+      "source_refs": [],
+      "update_marks": ["scope_boundary=不做协作与二次修改"],
+      "follow_ups": [],
+      "created_at": "2026-07-02T09:04:30+08:00"
+    }
+  ]
+}

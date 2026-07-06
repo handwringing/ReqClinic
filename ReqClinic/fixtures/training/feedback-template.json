@@ -1,0 +1,100 @@
+{
+  "case_id": "training-stakeholder-interview",
+  "coverage_score_rule": {
+    "max_score": 1.0,
+    "formula": "已覆盖维度数 / 总维度数（covered=1.0, partial=0.5, missing=0）",
+    "pass_threshold": 0.6
+  },
+  "dimension_breakdown": [
+    {
+      "dimension": "目标",
+      "status_mapping": {
+        "covered": "明确问出安保侧的核心目标（安全可控、降低风险）并得到确认",
+        "partial": "提及目标但未深入确认",
+        "missing": "未涉及目标维度"
+      },
+      "missing_indicators": ["未询问安保核心目标", "未确认目标优先级"]
+    },
+    {
+      "dimension": "用户场景",
+      "status_mapping": {
+        "covered": "覆盖高峰期、日常、异常等多种场景并得到描述",
+        "partial": "只问到日常场景",
+        "missing": "未涉及场景"
+      },
+      "missing_indicators": ["未询问高峰期场景", "未询问异常场景"]
+    },
+    {
+      "dimension": "方案分离",
+      "status_mapping": {
+        "covered": "能将问题与解决方案分离，先问需求再问偏好",
+        "partial": "问题与方案混在一起",
+        "missing": "直接跳到方案"
+      },
+      "missing_indicators": ["混淆需求与方案", "未先澄清需求"]
+    },
+    {
+      "dimension": "范围",
+      "status_mapping": {
+        "covered": "明确问出本次范围与不做项",
+        "partial": "只问到做什么，未问不做什么",
+        "missing": "未涉及范围"
+      },
+      "missing_indicators": ["未确认不做项", "未划定边界"]
+    },
+    {
+      "dimension": "约束",
+      "status_mapping": {
+        "covered": "问出批量审批阈值、异常处理流程、集成方式等约束",
+        "partial": "只问到部分约束",
+        "missing": "未涉及约束"
+      },
+      "missing_indicators": ["未问批量审批阈值", "未问异常处理流程", "未问集成方式"]
+    },
+    {
+      "dimension": "验证",
+      "status_mapping": {
+        "covered": "问到如何验收、如何判断达标",
+        "partial": "提及但未细化",
+        "missing": "未涉及验证"
+      },
+      "missing_indicators": ["未问验收标准", "未问达标判断"]
+    },
+    {
+      "dimension": "总结质量",
+      "status_mapping": {
+        "covered": "总结准确覆盖关键点，结构清晰，与受访者确认一致",
+        "partial": "总结有遗漏或偏差",
+        "missing": "未做总结或总结严重失真"
+      },
+      "missing_indicators": ["总结遗漏关键点", "未与受访者确认"]
+    },
+    {
+      "dimension": "沟通质量",
+      "status_mapping": {
+        "covered": "提问开放、追问到位、语气专业、倾听充分",
+        "partial": "提问基本顺畅但追问不足",
+        "missing": "沟通生硬或频繁打断"
+      },
+      "missing_indicators": ["追问不足", "语气不够专业", "打断受访者"]
+    }
+  ],
+  "improvement_examples": [
+    {
+      "before": "你想做哪些功能？",
+      "after": "在时间、预算或平台限制下，哪些功能必须第一版完成？",
+      "reason": "把开放追问改成带约束的范围澄清"
+    },
+    {
+      "before": "系统要快。",
+      "after": "高峰期 95% 请求在 500ms 内返回。",
+      "reason": "把模糊诉求改成可观察的完成标准"
+    },
+    {
+      "before": "用户会用到这个功能吗？",
+      "after": "在高峰期、日常和异常三类场景下，谁会触发这个功能？",
+      "reason": "把是非题改成场景化追问"
+    }
+  ],
+  "created_at": "2026-07-02T13:05:00+08:00"
+}

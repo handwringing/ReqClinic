@@ -1,0 +1,57 @@
+{
+  "case_id": "aster-visitor-access",
+  "project_id": "ast_project_001",
+  "previews": [
+    {
+      "id": "ast_change_001",
+      "project_id": "ast_project_001",
+      "description": "将“人脸识别辅助核验”改为“证件识别辅助核验”，即用身份证件扫描替代人脸识别作为辅助核验手段。",
+      "trigger_reason": "预演：若人脸识别因隐私合规或硬件采购受阻，改为证件识别方案的影响评估。",
+      "impact": [
+        {
+          "entity_type": "requirement",
+          "entity_id": "ast_req_r5",
+          "impact_type": "modified",
+          "severity": "major",
+          "recommended_action": "将 R5 标题与描述从“人脸识别辅助核验”改为“证件识别辅助核验”，更新验收标准。"
+        },
+        {
+          "entity_type": "requirement",
+          "entity_id": "ast_req_r4",
+          "impact_type": "modified",
+          "severity": "minor",
+          "recommended_action": "R4 扫码核验流程需兼容证件扫描设备输入，补充相关验收标准。"
+        },
+        {
+          "entity_type": "outcome",
+          "entity_id": "ast_outcome_o3",
+          "impact_type": "modified",
+          "severity": "minor",
+          "recommended_action": "O3 通行方式由二维码+人脸调整为二维码+证件，更新描述。"
+        },
+        {
+          "entity_type": "evidence",
+          "entity_id": "ast_evidence_006",
+          "impact_type": "invalidated",
+          "severity": "minor",
+          "recommended_action": "王磊关于“人脸识别是加分项”的证据需补充证件识别相关表态。"
+        },
+        {
+          "entity_type": "acceptance",
+          "entity_id": "ast_ac_r5_1",
+          "impact_type": "modified",
+          "severity": "major",
+          "recommended_action": "将“比对人脸与预约照片”改为“核验证件信息与预约信息一致性”。"
+        },
+        {
+          "entity_type": "decision",
+          "entity_id": "ast_decision_001",
+          "impact_type": "modified",
+          "severity": "minor",
+          "recommended_action": "决策依据由“人脸识别需采购硬件”调整为“证件识别设备采购与隐私合规评估”。"
+        }
+      ],
+      "created_at": "2026-07-02T12:00:00+08:00"
+    }
+  ]
+}

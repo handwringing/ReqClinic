@@ -1,0 +1,26 @@
+{
+  "id": "general",
+  "version": "1.0.0",
+  "name": "通用领域配置",
+  "status": "released",
+  "compatible_core_schema": "1.0.0",
+  "manifest": {
+    "entity_types": ["outcome", "requirement", "driver"],
+    "custom_fields": [],
+    "gates": ["definition_of_ready", "definition_of_done"],
+    "slots": [
+      "expected_outcome",
+      "user_object",
+      "core_scenario",
+      "scope_boundary",
+      "completion_criteria",
+      "constraints_risks"
+    ]
+  },
+  "manifest_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "released_at": "2026-06-01T00:00:00Z",
+  "deprecated_at": null,
+  "prompts": {
+    "extraction": "general-extraction-v1"
+  }
+}

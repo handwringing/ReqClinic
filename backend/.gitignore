@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# sqlite databases and sidecar files
+data/*
+!data/.gitkeep
+*.db
+*.db-wal
+*.db-shm
+
+# environment files
+.env
+.env.*
+!.env.example
+
+# misc
+*.log
+.DS_Store

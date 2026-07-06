@@ -1,0 +1,51 @@
+{
+  "case_id": "aster-visitor-access",
+  "project_id": "ast_project_001",
+  "stakeholders": [
+    {
+      "id": "ast_stakeholder_001",
+      "project_id": "ast_project_001",
+      "name": "园区管理方",
+      "type": "organization",
+      "power": "high",
+      "interest": "high",
+      "stance": "希望系统尽快上线，提升园区形象与管理效率"
+    },
+    {
+      "id": "ast_stakeholder_002",
+      "project_id": "ast_project_001",
+      "name": "安保部门",
+      "type": "organization",
+      "power": "high",
+      "interest": "high",
+      "stance": "关注通行安全与审批可控性，倾向逐个确认"
+    },
+    {
+      "id": "ast_stakeholder_003",
+      "project_id": "ast_project_001",
+      "name": "访客",
+      "type": "person",
+      "power": "low",
+      "interest": "high",
+      "stance": "希望预约便捷、通行顺畅，不想排队等待"
+    },
+    {
+      "id": "ast_stakeholder_004",
+      "project_id": "ast_project_001",
+      "name": "被访员工",
+      "type": "person",
+      "power": "medium",
+      "interest": "medium",
+      "stance": "希望访客能快速到达，减少接送时间"
+    },
+    {
+      "id": "ast_stakeholder_005",
+      "project_id": "ast_project_001",
+      "name": "IT部门",
+      "type": "organization",
+      "power": "medium",
+      "interest": "high",
+      "stance": "关注与现有系统集成和数据安全，担心工期"
+    }
+  ]
+}

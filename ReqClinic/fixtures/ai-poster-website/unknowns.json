@@ -1,0 +1,48 @@
+{
+  "case_id": "ai-poster-website",
+  "session_id": "apw_session_001",
+  "blocking_unknowns": [
+    {
+      "id": "apw_unknown_001",
+      "session_id": "apw_session_001",
+      "question": "是否需要多人协作编辑",
+      "is_blocking": true,
+      "impact": "影响架构设计",
+      "suggested_owner": "产品负责人"
+    },
+    {
+      "id": "apw_unknown_002",
+      "session_id": "apw_session_001",
+      "question": "生成结果是否可二次修改",
+      "is_blocking": true,
+      "impact": "影响功能范围",
+      "suggested_owner": "产品负责人"
+    }
+  ],
+  "non_blocking_unknowns": [
+    {
+      "id": "apw_unknown_003",
+      "session_id": "apw_session_001",
+      "question": "是否需要模板库",
+      "is_blocking": false,
+      "impact": "影响首版交付内容丰富度",
+      "suggested_owner": "产品负责人"
+    },
+    {
+      "id": "apw_unknown_004",
+      "session_id": "apw_session_001",
+      "question": "是否支持自定义字体",
+      "is_blocking": false,
+      "impact": "影响前端渲染方案选择",
+      "suggested_owner": "前端负责人"
+    },
+    {
+      "id": "apw_unknown_005",
+      "session_id": "apw_session_001",
+      "question": "是否需要导出图片或版式文件",
+      "is_blocking": false,
+      "impact": "影响交付物形态与后端工作量",
+      "suggested_owner": "产品负责人"
+    }
+  ]
+}

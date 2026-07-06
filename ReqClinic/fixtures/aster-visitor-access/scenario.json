@@ -1,0 +1,79 @@
+{
+  "case_id": "aster-visitor-access",
+  "project": {
+    "id": "ast_project_001",
+    "title": "Aster 园区访客预约与通行",
+    "status": "ingesting",
+    "version": 1,
+    "created_by": "ast_member_001",
+    "created_at": "2026-07-02T10:00:00+08:00",
+    "updated_at": "2026-07-02T10:00:00+08:00"
+  },
+  "original_request": "我们需要一个支持人脸识别的访客预约系统，最好下个月上线。园区有3个出入口，每天访客量约500人，需要支持批量审批。",
+  "project_title": "Aster 园区访客预约与通行",
+  "members": [
+    {
+      "id": "ast_member_001",
+      "project_id": "ast_project_001",
+      "user_id": "ast_user_zhoumin",
+      "display_name": "周敏",
+      "role": "owner",
+      "initials": "ZM"
+    },
+    {
+      "id": "ast_member_002",
+      "project_id": "ast_project_001",
+      "user_id": "ast_user_lifang",
+      "display_name": "李芳",
+      "role": "analyst",
+      "initials": "LF"
+    },
+    {
+      "id": "ast_member_003",
+      "project_id": "ast_project_001",
+      "user_id": "ast_user_wanglei",
+      "display_name": "王磊",
+      "role": "reviewer",
+      "initials": "WL"
+    },
+    {
+      "id": "ast_member_004",
+      "project_id": "ast_project_001",
+      "user_id": "ast_user_zhangwei",
+      "display_name": "张伟",
+      "role": "reviewer",
+      "initials": "ZW"
+    },
+    {
+      "id": "ast_member_005",
+      "project_id": "ast_project_001",
+      "user_id": "ast_user_zhaoli",
+      "display_name": "赵丽",
+      "role": "observer",
+      "initials": "ZL"
+    }
+  ],
+  "sources": [
+    {
+      "id": "ast_source_001",
+      "project_id": "ast_project_001",
+      "filename": "访客预约需求说明.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "byte_size": 128000,
+      "sensitivity": "internal",
+      "extraction_status": "completed",
+      "uploaded_at": "2026-07-02T10:05:00+08:00"
+    },
+    {
+      "id": "ast_source_002",
+      "project_id": "ast_project_001",
+      "filename": "园区出入口平面图.pdf",
+      "mime_type": "application/pdf",
+      "byte_size": 256000,
+      "sensitivity": "internal",
+      "extraction_status": "completed",
+      "uploaded_at": "2026-07-02T10:06:00+08:00"
+    }
+  ],
+  "created_at": "2026-07-02T10:00:00+08:00"
+}

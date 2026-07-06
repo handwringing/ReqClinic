@@ -1,0 +1,29 @@
+{
+  "id": "software-delivery",
+  "version": "1.0.0",
+  "name": "软件交付领域配置",
+  "status": "released",
+  "compatible_core_schema": "1.0.0",
+  "manifest": {
+    "entity_types": ["requirement", "outcome", "driver"],
+    "custom_fields": [
+      { "name": "story_points", "type": "integer", "entity": "requirement" },
+      { "name": "priority", "type": "string", "entity": "requirement" }
+    ],
+    "gates": ["definition_of_ready", "definition_of_done"],
+    "slots": [
+      "expected_outcome",
+      "user_object",
+      "core_scenario",
+      "scope_boundary",
+      "completion_criteria",
+      "constraints_risks"
+    ]
+  },
+  "manifest_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "released_at": "2026-06-01T00:00:00Z",
+  "deprecated_at": null,
+  "prompts": {
+    "extraction": "software-delivery-extraction-v1"
+  }
+}

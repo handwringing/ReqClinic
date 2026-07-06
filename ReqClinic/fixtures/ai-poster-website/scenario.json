@@ -1,0 +1,19 @@
+{
+  "case_id": "ai-poster-website",
+  "source_kind": "sample",
+  "session": {
+    "id": "apw_session_001",
+    "status": "clarifying",
+    "source_kind": "sample",
+    "source_case_id": "ai-poster-website",
+    "original_input": "我想做一个智能海报生成网站，用户输入一句话就能生成可在线访问的海报网页，最好手机上也能看，30 秒内能出结果。",
+    "current_understanding_version": 0,
+    "brief_version": 0,
+    "created_at": "2026-07-02T09:00:00+08:00",
+    "updated_at": "2026-07-02T09:00:00+08:00"
+  },
+  "original_input": "我想做一个智能海报生成网站，用户输入一句话就能生成可在线访问的海报网页，最好手机上也能看，30 秒内能出结果。",
+  "goal_usage": "快速产出宣传素材",
+  "candidate_title": "智能海报生成网站",
+  "created_at": "2026-07-02T09:00:00+08:00"
+}

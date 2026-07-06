@@ -1,0 +1,53 @@
+{
+  "case_id": "ai-poster-website",
+  "session_id": "apw_session_001",
+  "version": 1,
+  "summary": "为小团队宣传岗，在输入一句话快速生成的场景下，解决没有设计能力也能产出海报的问题，达到30秒内得到可移动端访问的网页海报的结果。",
+  "slots": {
+    "expected_outcome": "30秒内得到可移动端访问的网页海报",
+    "target_user": "小团队宣传岗（主要）、个人创作者（次要）",
+    "core_scenario": "输入一句话 → 系统生成 → 手机扫码访问",
+    "scope_boundary": "本次只做单页海报生成，不做多页排版和团队协作",
+    "completion_criteria": "生成耗时P95≤30秒，移动端首屏≤1秒",
+    "constraints_risks": "需考虑版权和内容审核，成本控制在每次生成0.5元以内"
+  },
+  "coverage_slots": [
+    {
+      "name": "expected_outcome",
+      "label": "希望结果",
+      "state": "covered",
+      "is_blocking": true
+    },
+    {
+      "name": "target_user",
+      "label": "目标用户",
+      "state": "covered",
+      "is_blocking": true
+    },
+    {
+      "name": "core_scenario",
+      "label": "核心场景",
+      "state": "covered",
+      "is_blocking": true
+    },
+    {
+      "name": "scope_boundary",
+      "label": "范围边界",
+      "state": "partial",
+      "is_blocking": true
+    },
+    {
+      "name": "completion_criteria",
+      "label": "完成条件",
+      "state": "partial",
+      "is_blocking": true
+    },
+    {
+      "name": "constraints_risks",
+      "label": "约束风险",
+      "state": "not_started",
+      "is_blocking": true
+    }
+  ],
+  "updated_at": "2026-07-02T09:05:00+08:00"
+}

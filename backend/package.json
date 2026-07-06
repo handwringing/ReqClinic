@@ -1,0 +1,41 @@
+{
+  "name": "reqclinic-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ReqClinic Stage B backend service",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "audit:ai": "tsx src/scripts/export-ai-audit-summary.ts",
+    "test": "vitest run",
+    "test:contract": "vitest run tests/contract",
+    "test:integration": "vitest run tests/integration",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.0.1",
+    "better-sqlite3": "^12.11.1",
+    "drizzle-orm": "^0.38.4",
+    "fastify": "^5.2.1",
+    "pino": "^9.6.0",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.7",
+    "drizzle-kit": "^0.30.4",
+    "pino-pretty": "^11.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

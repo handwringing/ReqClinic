@@ -1,0 +1,26 @@
+{
+  "case_id": "aster-visitor-access",
+  "project_id": "ast_project_001",
+  "decisions": [
+    {
+      "id": "ast_decision_001",
+      "conflict_id": "ast_conflict_c1",
+      "title": "首版二维码先行，人脸识别放第二期",
+      "chosen_candidate_id": "ast_cand_c1a",
+      "rationale": "安保已确认人脸识别为加分项而非必须项，二维码加人工抽查可兜底。首版优先保工期，人脸识别放第二期更稳妥。",
+      "impact_summary": "R5（人脸识别辅助核验）从 now 调整为 next；首版上线范围聚焦 R1-R4。",
+      "decided_at": "2026-07-02T11:30:00+08:00",
+      "decided_by": "ast_member_001"
+    },
+    {
+      "id": "ast_decision_002",
+      "conflict_id": "ast_conflict_c2",
+      "title": "批量预审+异常逐个确认",
+      "chosen_candidate_id": "ast_cand_c2a",
+      "rationale": "批量预审+异常逐个确认既满足效率诉求，又保留安保对异常项的把控，双方均可接受。",
+      "impact_summary": "R2 细化为：系统自动预审+安保对异常项逐个确认；需新增预审规则配置能力。",
+      "decided_at": "2026-07-02T11:35:00+08:00",
+      "decided_by": "ast_member_001"
+    }
+  ]
+}

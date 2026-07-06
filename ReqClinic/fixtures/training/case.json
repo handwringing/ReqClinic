@@ -1,0 +1,33 @@
+{
+  "case_id": "training-stakeholder-interview",
+  "training_case": {
+    "id": "trn_case_001",
+    "title": "练习与安保主管访谈",
+    "category": "需求访谈",
+    "difficulty": "medium",
+    "version": "1.0.0",
+    "description": "你正在与园区安保主管王磊访谈，了解他对访客系统的需求。尝试通过追问把模糊需求问清楚。"
+  },
+  "scenario_context": {
+    "interviewee": {
+      "name": "王磊",
+      "role": "安保主管",
+      "stakeholder_id": "trn_stakeholder_001",
+      "persona": "关注通行安全与审批可控性，对效率提升持谨慎态度，倾向逐个确认以防风险。"
+    },
+    "situation": "园区计划上线访客预约系统，你是需求分析师李芳，正在与安保主管王磊进行一对一访谈，目标是把安保侧的模糊需求问清楚、问到位。"
+  },
+  "disclosure_rules": [
+    "可透露：安保人员数量",
+    "可透露：当前审批流程",
+    "不可透露：具体预算数字"
+  ],
+  "disclosed_info": {
+    "安保人员数量": "园区3个出入口各常驻2名安保，共6人",
+    "当前审批流程": "访客现场填写纸质单，安保核对身份证后放行，高峰期排队明显"
+  },
+  "hidden_info": {
+    "具体预算数字": "本项目预算约50万元"
+  },
+  "created_at": "2026-07-02T13:00:00+08:00"
+}

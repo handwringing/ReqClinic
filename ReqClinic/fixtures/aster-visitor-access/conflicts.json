@@ -1,0 +1,116 @@
+{
+  "case_id": "aster-visitor-access",
+  "project_id": "ast_project_001",
+  "conflicts": [
+    {
+      "id": "ast_conflict_c1",
+      "project_id": "ast_project_001",
+      "statement": "“下个月上线”与“人脸识别需要采购硬件并训练数据”存在时间冲突",
+      "severity": "blocking",
+      "status": "resolved",
+      "version": 1,
+      "parties": [
+        {
+          "viewpoint": "管理方希望下个月峰会前上线，且需求原文提到“支持人脸识别”，期望首版即包含该能力。",
+          "evidence_refs": ["ast_evidence_002", "ast_evidence_007"]
+        },
+        {
+          "viewpoint": "IT部门表示人脸识别需采购新硬件并训练模型，一个月内无法完成，建议首版先用二维码凭证。",
+          "evidence_refs": ["ast_evidence_004"]
+        }
+      ],
+      "candidates": [
+        {
+          "id": "ast_cand_c1a",
+          "title": "首版二维码先行，人脸识别放第二期",
+          "description": "首版只实现二维码凭证通行，人脸识别作为第二期增强。可在峰会前按时上线。",
+          "pros": ["工期可控，一个月内可上线", "复用现有扫码设备，无采购风险", "安保已确认二维码可兜底"],
+          "cons": ["首版无人脸核验，人证一致性靠人工抽查"],
+          "effort": "medium",
+          "reversible": true,
+          "is_recommended": true
+        },
+        {
+          "id": "ast_cand_c1b",
+          "title": "延后上线，等人脸识别一起上",
+          "description": "将整体上线时间推迟到人脸识别就绪后，保证首版功能完整。",
+          "pros": ["首版功能完整", "无需分两期交付"],
+          "cons": ["错过峰会窗口期", "管理方明确反对延后"],
+          "effort": "high",
+          "reversible": false,
+          "is_recommended": false
+        },
+        {
+          "id": "ast_cand_c1c",
+          "title": "采购现成人脸设备，跳过自训练",
+          "description": "采购第三方成熟人脸识别设备直接集成，跳过模型训练环节。",
+          "pros": ["可缩短人脸识别落地周期"],
+          "cons": ["采购周期仍不确定", "成本较高，需走采购流程", "与现有系统集成风险大"],
+          "effort": "high",
+          "reversible": false,
+          "is_recommended": false
+        }
+      ],
+      "decision": {
+        "chosen": "ast_cand_c1a",
+        "rationale": "安保已确认人脸识别为加分项而非必须项，二维码加人工抽查可兜底。首版优先保工期，人脸识别放第二期更稳妥。",
+        "decided_at": "2026-07-02T11:30:00+08:00"
+      }
+    },
+    {
+      "id": "ast_conflict_c2",
+      "project_id": "ast_project_001",
+      "statement": "“批量审批”与“安保希望逐个确认”在审批粒度上存在分歧",
+      "severity": "major",
+      "status": "resolved",
+      "version": 1,
+      "parties": [
+        {
+          "viewpoint": "管理方要求支持批量审批，以应对峰会期间激增的访客量，提升效率。",
+          "evidence_refs": ["ast_evidence_001"]
+        },
+        {
+          "viewpoint": "安保担心一次性放行过多有风险，希望异常的能逐个确认，把控安全。",
+          "evidence_refs": ["ast_evidence_003"]
+        }
+      ],
+      "candidates": [
+        {
+          "id": "ast_cand_c2a",
+          "title": "批量预审+异常逐个确认",
+          "description": "系统对批量预约做自动预审，标记异常项由安保逐个确认，正常项批量通过。",
+          "pros": ["兼顾效率与安全", "安保只需关注异常项", "可配置异常规则"],
+          "cons": ["需要预审规则引擎", "规则配置需与安保对齐"],
+          "effort": "medium",
+          "reversible": true,
+          "is_recommended": true
+        },
+        {
+          "id": "ast_cand_c2b",
+          "title": "全部逐个确认",
+          "description": "所有预约均由安保逐个确认后放行。",
+          "pros": ["安全把控最强"],
+          "cons": ["峰会期间工作量爆炸", "与提升效率目标冲突"],
+          "effort": "low",
+          "reversible": true,
+          "is_recommended": false
+        },
+        {
+          "id": "ast_cand_c2c",
+          "title": "全部批量自动通过",
+          "description": "所有预约自动通过，安保仅事后抽查。",
+          "pros": ["效率最高"],
+          "cons": ["安全风险高", "安保明确反对"],
+          "effort": "low",
+          "reversible": true,
+          "is_recommended": false
+        }
+      ],
+      "decision": {
+        "chosen": "ast_cand_c2a",
+        "rationale": "批量预审+异常逐个确认既满足效率诉求，又保留安保对异常项的把控，双方均可接受。",
+        "decided_at": "2026-07-02T11:35:00+08:00"
+      }
+    }
+  ]
+}

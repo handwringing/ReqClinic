@@ -1,0 +1,15 @@
+{
+  "case_id": "ai-poster-website",
+  "fixture_schema_version": "1.0.0",
+  "entry_stage": "quick_clarifying",
+  "files": [
+    { "path": "scenario.json", "sha256": "placeholder" },
+    { "path": "clarifying-qa.json", "sha256": "placeholder" },
+    { "path": "understanding.json", "sha256": "placeholder" },
+    { "path": "options.json", "sha256": "placeholder" },
+    { "path": "unknowns.json", "sha256": "placeholder" },
+    { "path": "brief-simple.json", "sha256": "placeholder" },
+    { "path": "brief-exec.json", "sha256": "placeholder" }
+  ],
+  "required_features": ["quick_consult"]
+}

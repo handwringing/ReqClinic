@@ -1,0 +1,68 @@
+{
+  "cases": [
+    {
+      "id": "trn_case_001",
+      "title": "练习与安保主管访谈",
+      "category": "需求访谈",
+      "difficulty": "medium",
+      "version": "1.0.0",
+      "description": "你正在与园区安保主管王磊访谈，了解他对访客系统的需求。练习把安全、效率、异常和验收问清楚。"
+    },
+    {
+      "id": "trn_case_002",
+      "title": "澄清校园二手交易小程序边界",
+      "category": "范围边界",
+      "difficulty": "medium",
+      "version": "1.0.0",
+      "description": "对方想做校园二手交易小程序，但把发布信息、支付、物流和担保交易混在一起。练习拆分首版范围和不做项。"
+    },
+    {
+      "id": "trn_case_003",
+      "title": "追问双十一护肤品海报 Brief",
+      "category": "创意简报",
+      "difficulty": "easy",
+      "version": "1.0.0",
+      "description": "品牌方只说要高级感和转化效果。练习追问目标受众、渠道规格、核心信息、素材和审核风险。"
+    },
+    {
+      "id": "trn_case_004",
+      "title": "把课程论文题目问成研究问题",
+      "category": "学术任务",
+      "difficulty": "easy",
+      "version": "1.0.0",
+      "description": "同学想写生成式智能对教育影响，但范围过大。练习确认课程要求、评分标准、研究问题和证据范围。"
+    },
+    {
+      "id": "trn_case_005",
+      "title": "梳理健身房续费服务流程",
+      "category": "服务流程",
+      "difficulty": "hard",
+      "version": "1.0.0",
+      "description": "店长希望提高续费率，但不知道问题出在提醒、顾问跟进还是会员体验。练习用服务蓝图视角追问触点与失效点。"
+    },
+    {
+      "id": "trn_case_006",
+      "title": "企业官网外包前的范围追问",
+      "category": "外包采购",
+      "difficulty": "hard",
+      "version": "1.0.0",
+      "description": "甲方准备找外包做官网。练习追问工作范围、交付物、排除项、验收口径、里程碑和变更机制。"
+    },
+    {
+      "id": "trn_case_007",
+      "title": "多人毕业设计的角色与决策",
+      "category": "协作项目",
+      "difficulty": "medium",
+      "version": "1.0.0",
+      "description": "三人小组要做智能面试助手毕业设计。练习追问共同目标、分工、数据边界、答辩标准和版本节点。"
+    },
+    {
+      "id": "trn_case_008",
+      "title": "早期智能产品想法验证",
+      "category": "早期想法",
+      "difficulty": "medium",
+      "version": "1.0.0",
+      "description": "对方想做帮助社恐练沟通的智能产品，但还没有明确切入点。练习保护早期想法，不要过早写成完整需求文档。"
+    }
+  ]
+}

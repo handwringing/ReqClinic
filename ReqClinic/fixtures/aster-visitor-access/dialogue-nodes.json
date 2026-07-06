@@ -1,0 +1,78 @@
+{
+  "case_id": "aster-visitor-access",
+  "project_id": "ast_project_001",
+  "turns": [
+    {
+      "id": "ast_dialogue_001",
+      "project_id": "ast_project_001",
+      "stakeholder_id": "ast_stakeholder_001",
+      "role": "interviewer",
+      "content": "周敏你好，先聊聊这个项目的业务目标和时间压力。为什么希望下个月就上线？",
+      "speaker": "李芳",
+      "created_at": "2026-07-02T10:30:00+08:00"
+    },
+    {
+      "id": "ast_dialogue_002",
+      "project_id": "ast_project_001",
+      "stakeholder_id": "ast_stakeholder_001",
+      "role": "interviewee",
+      "content": "下个月园区要承办一场大型行业峰会，预计单日访客量会翻倍到1000人。现有纸质登记流程根本扛不住，所以我们希望峰会前能上线电子预约。业务目标就是让访客能自助预约、安保能高效放行，提升园区形象。",
+      "speaker": "周敏",
+      "created_at": "2026-07-02T10:31:00+08:00"
+    },
+    {
+      "id": "ast_dialogue_003",
+      "project_id": "ast_project_001",
+      "stakeholder_id": "ast_stakeholder_002",
+      "role": "interviewer",
+      "content": "王磊，从安保角度看，你们对访客通行和审批有什么具体要求？",
+      "speaker": "李芳",
+      "created_at": "2026-07-02T10:35:00+08:00"
+    },
+    {
+      "id": "ast_dialogue_004",
+      "project_id": "ast_project_001",
+      "stakeholder_id": "ast_stakeholder_002",
+      "role": "interviewee",
+      "content": "我们每天3个出入口共约500人次，高峰期集中在早上9点和下午2点。审批上我们希望能批量处理，但也担心一次性放行太多有风险，理想情况是能批量预审、异常的再逐个确认。另外人脸识别最好作为辅助核验手段，不是唯一方式。",
+      "speaker": "王磊",
+      "created_at": "2026-07-02T10:36:00+08:00"
+    },
+    {
+      "id": "ast_dialogue_005",
+      "project_id": "ast_project_001",
+      "stakeholder_id": "ast_stakeholder_005",
+      "role": "interviewer",
+      "content": "张伟，技术上这块和现有系统怎么集成？有什么约束？",
+      "speaker": "李芳",
+      "created_at": "2026-07-02T10:40:00+08:00"
+    },
+    {
+      "id": "ast_dialogue_006",
+      "project_id": "ast_project_001",
+      "stakeholder_id": "ast_stakeholder_005",
+      "role": "interviewee",
+      "content": "园区现有门禁系统是三年前部署的，支持二维码读取但没有人脸设备。如果要上人脸识别，需要采购新硬件并训练模型，一个月内很难完成。我的建议是首版先用二维码凭证通行，人脸识别放到第二期。另外通行数据要能对接到我们现有的安保管理平台。",
+      "speaker": "张伟",
+      "created_at": "2026-07-02T10:41:00+08:00"
+    },
+    {
+      "id": "ast_dialogue_007",
+      "project_id": "ast_project_001",
+      "stakeholder_id": null,
+      "role": "interviewer",
+      "content": "我想澄清一下：需求里提到的“人脸识别”，是必须用于身份核验，还是作为辅助快速通行手段？如果改用证件识别加二维码，是否也能满足安保要求？",
+      "speaker": "李芳",
+      "created_at": "2026-07-02T10:45:00+08:00"
+    },
+    {
+      "id": "ast_dialogue_008",
+      "project_id": "ast_project_001",
+      "stakeholder_id": "ast_stakeholder_002",
+      "role": "interviewee",
+      "content": "人脸识别是加分项不是必须项。我们真正必须的是：每个访客有可追溯的凭证，安保能核验人证一致。二维码加人工抽查能兜底，人脸识别留到第二期做辅助核验更稳妥。",
+      "speaker": "王磊",
+      "created_at": "2026-07-02T10:46:00+08:00"
+    }
+  ]
+}
