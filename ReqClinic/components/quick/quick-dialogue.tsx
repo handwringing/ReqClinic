@@ -6,6 +6,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import {
   useCallback,
   useEffect,
@@ -24,7 +25,6 @@ import {
   quickDemoReview,
   quickDemoSupplement,
 } from '@/lib/quick-demo-cases';
-import { withSiteBasePath } from '@/lib/site-path';
 import type { QuickCardBinding } from './quick-visualization';
 
 const MAX_LENGTH = 10000;
@@ -520,6 +520,8 @@ function StageActionPanel({
   actionHref?: string;
   options?: DisplayOption[];
 }) {
+  const router = useRouter();
+
   return (
     <div className="app-card mb-2" style={{ padding: '12px 14px' }}>
       <div className="mb-1 flex items-center gap-2">
@@ -533,14 +535,15 @@ function StageActionPanel({
           {description}
         </p>
         {actionHref && !disabled ? (
-          <a
-            href={withSiteBasePath(actionHref)}
+          <button
+            type="button"
+            onClick={() => router.push(actionHref)}
             className="app-btn-primary"
             style={{ padding: '8px 14px', fontSize: 12, textDecoration: 'none' }}
           >
             <Sparkles className="h-3.5 w-3.5" strokeWidth={1.5} />
             {actionText}
-          </a>
+          </button>
         ) : (
           <button
             type="button"
