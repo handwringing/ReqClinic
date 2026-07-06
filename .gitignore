@@ -20,6 +20,8 @@
 .planning/
 .playwright-cli/
 .trae/
+.github/
+docs/
 backups/
 screenshots/
 .cookies.txt
