@@ -32,7 +32,9 @@ export function BriefExportMenu({
 }: BriefExportMenuProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<'copy' | 'markdown' | null>(null);
+  const [manualCopyContent, setManualCopyContent] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+  const manualCopyRef = useRef<HTMLTextAreaElement>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -111,8 +113,20 @@ export function BriefExportMenu({
         copied = document.execCommand('copy');
         document.body.removeChild(ta);
       }
-      if (!copied) throw new Error('copy-failed');
-      showToast({ type: 'success', title: '已复制到剪贴板' });
+      if (copied) {
+        showToast({ type: 'success', title: '已复制到剪贴板' });
+      } else {
+        setManualCopyContent(content);
+        window.requestAnimationFrame(() => {
+          manualCopyRef.current?.focus();
+          manualCopyRef.current?.select();
+        });
+        showToast({
+          type: 'info',
+          title: '已打开专业报告文本',
+          description: '如果浏览器限制自动复制，可以直接全选复制。',
+        });
+      }
     } catch {
       showToast({ type: 'error', title: '复制失败', description: '请手动选择文本复制' });
     } finally {
@@ -235,6 +249,63 @@ export function BriefExportMenu({
               </button>
             );
           })}
+        </div>
+      )}
+      {manualCopyContent && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="复制专业报告"
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background: 'rgba(39,32,24,0.28)' }}
+        >
+          <div
+            className="flex w-full max-w-3xl flex-col gap-3"
+            style={{
+              borderRadius: 6,
+              border: '1px solid var(--aurora-card-border)',
+              background: 'var(--aurora-card-bg)',
+              boxShadow: 'var(--aurora-shadow-medium)',
+              padding: 16,
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3
+                  className="text-sm font-semibold"
+                  style={{ color: 'var(--aurora-ink)' }}
+                >
+                  专业报告文本
+                </h3>
+                <p
+                  className="mt-1 text-xs"
+                  style={{ color: 'var(--aurora-muted)' }}
+                >
+                  文本已为你选中，可以直接复制。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="app-btn-ghost"
+                onClick={() => setManualCopyContent('')}
+              >
+                关闭
+              </button>
+            </div>
+            <textarea
+              ref={manualCopyRef}
+              readOnly
+              value={manualCopyContent}
+              className="w-full resize-none rounded text-xs leading-relaxed"
+              style={{
+                minHeight: 360,
+                border: '1px solid var(--aurora-hair)',
+                background: 'rgba(255,255,255,0.72)',
+                color: 'var(--aurora-ink)',
+                padding: 12,
+              }}
+            />
+          </div>
         </div>
       )}
     </div>
