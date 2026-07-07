@@ -231,6 +231,27 @@ function sourceCaseIdFromStaticSessionId(sessionId?: string | null): string | nu
   return sessionId.slice(prefix.length) || null;
 }
 
+function buildStaticSampleBriefView(
+  sessionId: string | undefined,
+  viewType: BriefViewType,
+  briefVersion: number,
+): BriefView | null {
+  const sourceCaseId = sourceCaseIdFromStaticSessionId(sessionId);
+  if (!sourceCaseId || !getQuickDemoCase(sourceCaseId)) return null;
+  const fx = buildQuickDemoFixture(sourceCaseId);
+  const view = fx.brief_views?.[viewType];
+  if (!view) return null;
+  return {
+    ...view,
+    brief_version: briefVersion,
+  } as BriefView;
+}
+
+function isGenericBriefFallback(view: BriefView): boolean {
+  if ((view.sections ?? []).length > 0) return false;
+  return /需求简报（概述）|面向导出、评审和后续协作/.test(view.content ?? '');
+}
+
 function buildCurrentSampleFixture(store: MockSessionStore, session: QuickSession): any {
   return buildQuickDemoFixture(session.source_case_id, getUnderstanding(store, session.id));
 }
@@ -970,18 +991,17 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
     async (request: { session_id: UUID; brief_version: number; view_type: BriefViewType }) => {
       const views = getBriefViews(store, request.session_id);
       const existing = views[`${request.brief_version}:${request.view_type}`] ?? views[request.view_type];
-      if (existing) return existing;
-      const sourceCaseId = sourceCaseIdFromStaticSessionId(request.session_id);
-      if (sourceCaseId && getQuickDemoCase(sourceCaseId)) {
-        const fx = buildQuickDemoFixture(sourceCaseId);
-        const view = fx.brief_views?.[request.view_type];
-        if (view) {
-          return {
-            ...view,
-            brief_version: request.brief_version,
-          } as BriefView;
-        }
+      const staticSampleView = buildStaticSampleBriefView(
+        request.session_id,
+        request.view_type,
+        request.brief_version,
+      );
+      if (existing) {
+        return staticSampleView && isGenericBriefFallback(existing)
+          ? staticSampleView
+          : existing;
       }
+      if (staticSampleView) return staticSampleView;
       // 生成默认视图。
       const contentByType: Record<BriefViewType, string> = {
         simple: '# 需求简报（概述）\n\n本简报基于快速问诊澄清结果生成，包含目标、用户、场景与完成标准。',
