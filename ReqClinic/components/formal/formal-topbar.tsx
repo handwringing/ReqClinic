@@ -31,7 +31,7 @@ export function FormalTopbar({
   const needsAttention = pendingQuestionCount + unresolvedConflictCount;
   const sourceLabel =
     sourceKind === 'sample'
-      ? '示例体验'
+      ? '参考案例'
       : sourceKind === 'quick_upgrade'
         ? '由快速问诊升级'
         : null;

@@ -19,6 +19,7 @@ import type {
   TrainingAttempt,
   TrainingAttemptMessage,
   TrainingCase,
+  TrainingFeedback,
 } from '@/lib/api/types';
 import {
   Avatar,
@@ -60,6 +61,51 @@ interface TrainingProfile {
   focus: string;
   questions: string[];
 }
+
+const SAMPLE_ROLE_ANSWERS: Record<string, string[]> = {
+  运营指标: [
+    '我们说的转化率主要是从商品详情页到下单的转化，不包含老客复购。',
+    '希望在双十一前两周看到提升，目标是从现在的 2.8% 提到 3.5% 左右。',
+    '运营负责人确认目标，商品、投放和客服都需要配合。',
+    '统计时要排除异常流量、刷单订单和售后取消订单。',
+  ],
+  创意简报: [
+    '这组海报主要用于双十一前的拉新转化，希望突出首单优惠和套装折扣。',
+    '主要面向 20 到 28 岁的一二线城市女性用户，她们更在意成分安全、价格和上脸效果。',
+    '需要小红书封面、朋友圈长图和门店立牌三个版本。',
+    '不能使用医疗功效词，不能暗示永久效果，也不能使用未授权明星图。',
+  ],
+  学术任务: [
+    '课程要求 4000 字左右，至少 8 篇参考文献，下周五前提交。',
+    '我想聚焦大学课堂，而不是所有教育阶段。',
+    '研究问题可以是生成式智能如何改变学生写作反馈和教师评价方式。',
+    '老师允许英文文献，也可以引用政策文件和课堂案例。',
+  ],
+  服务流程: [
+    '目前主要看到期会员的续费率，最近三个月从 42% 降到 34%。',
+    '会员最常在课程结束后的回访阶段停止回应。',
+    '顾问负责回访，教练提供训练建议，店长只看最终续费数据。',
+    '第一版应该先改到期前 14 天到到期后 7 天这段流程。',
+  ],
+  外包采购: [
+    '官网主要目标是品牌展示和获取咨询线索。',
+    '首版必须有首页、服务介绍、案例、关于我们和咨询表单。',
+    '暂时不包含会员系统、在线支付、多语言和复杂后台。',
+    '验收标准是页面能上线、移动端可用、咨询表单能正常收到。',
+  ],
+  协作项目: [
+    '答辩最重要的是能跑通演示，同时说明数据边界和创新点。',
+    '一个人负责前端，一个人负责模型和数据，一个人负责文档和答辩材料。',
+    '最大的依赖是训练数据、模型接口稳定性和学校答辩设备环境。',
+    '第一版必须有演示流程、核心分析结果和答辩说明，个性化配置可以放后面。',
+  ],
+  早期想法: [
+    '最想练习的是用户不知道怎么把模糊想法说清楚的时刻。',
+    '第一批可以先面向学生和刚开始做项目的职场新人。',
+    '助手更像陪练教练，先追问，再指出表达哪里不清楚。',
+    '第一版最需要验证用户是否愿意连续练习，以及反馈是否真的能改进表达。',
+  ],
+};
 
 const TRAINING_PROFILES: Record<string, TrainingProfile> = {
   运营指标: {
@@ -134,6 +180,90 @@ function getTrainingProfile(trainingCase: TrainingCase): TrainingProfile {
   };
 }
 
+function getSampleRoleAnswer(trainingCase: TrainingCase, questionIndex: number, question: string): string {
+  const answers = SAMPLE_ROLE_ANSWERS[trainingCase.category] ?? SAMPLE_ROLE_ANSWERS.运营指标;
+  const direct = answers[questionIndex % answers.length];
+  if (direct) return direct;
+  return `这个问题需要进一步确认。你刚才问的是“${question}”，可以继续追问目标、对象、边界或验收标准。`;
+}
+
+function buildAutoSummary(trainingCase: TrainingCase, messages: TrainingMessage[]): string {
+  const userQuestions = messages
+    .filter((message) => message.role === 'user')
+    .map((message) => message.content.trim())
+    .filter(Boolean)
+    .slice(-4);
+  if (!userQuestions.length) {
+    return `本轮围绕《${trainingCase.title}》开始练习，还需要先提出一个能让对方回答的追问。`;
+  }
+  return [
+    `本轮练习案例：${trainingCase.title}`,
+    `已追问：${userQuestions.join('；')}`,
+    '系统将根据这些追问判断目标、对象、场景、边界和验收口径的覆盖情况。',
+  ].join('\n');
+}
+
+function buildSampleFeedback(trainingCase: TrainingCase, questionCount: number): TrainingFeedback {
+  const covered = Math.min(0.88, 0.42 + questionCount * 0.14);
+  const isCreative = trainingCase.category === '创意简报';
+  return {
+    coverage_score: covered,
+    missing_dimensions:
+      questionCount >= 4
+        ? ['后续变化处理']
+        : ['边界限制', '验收口径'],
+    improvement_suggestions: isCreative
+      ? [
+          '继续追问渠道尺寸、禁用表达和最终审核人。',
+          '把“好看”改成可检查的完成标准，例如核心卖点几秒内能读懂。',
+        ]
+      : [
+          '继续追问限制条件和最终确认人。',
+          '把模糊目标改成可观察的完成标准。',
+        ],
+    dimension_breakdown: [
+      {
+        dimension: '目标',
+        status: questionCount >= 1 ? 'covered' : 'partial',
+        evidence: questionCount >= 1 ? '已开始追问目标或用途。' : '还需要先确认目标。',
+        comment: '先确认为什么要做，后续范围才不会发散。',
+      },
+      {
+        dimension: '对象',
+        status: questionCount >= 2 ? 'covered' : 'partial',
+        evidence: questionCount >= 2 ? '已追问目标用户或确认人。' : '对象和确认人还不够清楚。',
+        comment: '对象不同，方案和验收标准会明显不同。',
+      },
+      {
+        dimension: '边界',
+        status: questionCount >= 4 ? 'covered' : 'missing',
+        evidence: questionCount >= 4 ? '已追问限制、禁用项或范围。' : '还没有充分追问限制条件。',
+        comment: '边界决定哪些承诺不能轻易写进需求。',
+      },
+      {
+        dimension: '验收',
+        status: questionCount >= 3 ? 'partial' : 'missing',
+        evidence: questionCount >= 3 ? '已有完成口径线索，但还可更量化。' : '还缺少可判断完成的标准。',
+        comment: '验收标准越具体，后续沟通成本越低。',
+      },
+    ],
+    improvement_examples: [
+      {
+        before: '你想做什么风格？',
+        after: isCreative
+          ? '这组海报主要投放在哪里，必须避开哪些功效或素材表达？'
+          : '第一版必须覆盖哪个场景，哪些内容明确不做？',
+        reason: '从泛泛偏好转成场景和边界追问。',
+      },
+      {
+        before: '这样可以吗？',
+        after: '什么结果出现时，你会认为这次需求已经完成？',
+        reason: '把确认式问题改成可验收标准追问。',
+      },
+    ],
+  };
+}
+
 function createInitialAssistantMessage(
   trainingCase: TrainingCase,
   trainingProfile: TrainingProfile,
@@ -145,9 +275,9 @@ function createInitialAssistantMessage(
     structured_content: {
       paragraphs: [
         trainingCase.description,
-        `先围绕${trainingProfile.focus}追问。下方会给出当前建议追问，你也可以把情境简介加入输入框后再发送。`,
+        `先围绕${trainingProfile.focus}追问。下方会给出当前建议追问，你也可以引用案例背景后再发送。`,
       ],
-      highlights: ['当前建议追问', '情境简介'],
+      highlights: ['当前建议追问', '案例背景'],
     },
     created_at: new Date().toISOString(),
   };
@@ -209,6 +339,28 @@ function extractRoleAnswerFromJob(result: unknown): string | null {
       }
     }
   }
+  const nested = findRoleAnswerDeep(result, 0);
+  if (nested) return nested;
+  return null;
+}
+
+function findRoleAnswerDeep(value: unknown, depth: number): string | null {
+  if (depth > 4 || !value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  for (const key of ['role_answer', 'answer', 'content', 'message', 'text', 'response']) {
+    const item = record[key];
+    if (typeof item === 'string' && item.trim()) return item.trim();
+    if (item && typeof item === 'object') {
+      const nested = findRoleAnswerDeep(item, depth + 1);
+      if (nested) return nested;
+    }
+  }
+  for (const item of Object.values(record)) {
+    if (item && typeof item === 'object') {
+      const nested = findRoleAnswerDeep(item, depth + 1);
+      if (nested) return nested;
+    }
+  }
   return null;
 }
 
@@ -255,10 +407,10 @@ function looksLikeTrainingQuestion(value: string): boolean {
   if (/[一-龥]/.test(text) && /什么|谁|哪里|哪个|哪些|多少|多久|如何|怎么|是否|能不能|有没有|为什么|确认|判断|标准|目标|范围|角色|场景|验收/.test(text)) {
     return true;
   }
-  return /[一-龥]/.test(text) && text.length >= 8;
+  return false;
 }
 
-const POLL_INTERVAL_MS = 1200;
+const POLL_INTERVAL_MS = 650;
 const POLL_TIMEOUT_MS = 60_000;
 
 function sleep(ms: number): Promise<void> {
@@ -269,7 +421,6 @@ function sleep(ms: number): Promise<void> {
 async function pollJobUntilDone(jobId: string): Promise<AiJob | null> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
-    await sleep(POLL_INTERVAL_MS);
     try {
       const job = await getApiClient().getJobStatus(jobId);
       if (
@@ -282,6 +433,7 @@ async function pollJobUntilDone(jobId: string): Promise<AiJob | null> {
     } catch {
       // 单次失败不中断轮询
     }
+    await sleep(POLL_INTERVAL_MS);
   }
   return null;
 }
@@ -303,7 +455,7 @@ function useSplitPct(storageKey: string, defaultPct: number, min = 25, max = 75)
 export interface TrainingSplitPageProps {
   attempt: TrainingAttempt;
   trainingCase: TrainingCase;
-  onSummarySubmitted: (jobId: string) => void;
+  onSummarySubmitted: (jobId: string, localFeedback?: TrainingFeedback) => void;
 }
 
 export function TrainingSplitPage({
@@ -315,7 +467,7 @@ export function TrainingSplitPage({
   const caseBinding = useMemo<TrainingBinding>(
     () => ({
       id: 'training-case-brief',
-      title: '情境简介',
+      title: '案例背景',
       detail: trainingCase.title,
     }),
     [trainingCase.title],
@@ -335,7 +487,6 @@ export function TrainingSplitPage({
   const [bindings, setBindings] = useState<TrainingBinding[]>([]);
   const [questionCount, setQuestionCount] = useState(attempt.question_count);
   const [briefOpen, setBriefOpen] = useState(true);
-  const [notes, setNotes] = useState('');
   const [submittingQuestion, setSubmittingQuestion] = useState(false);
   const [submittingSummary, setSubmittingSummary] = useState(false);
 
@@ -374,7 +525,11 @@ export function TrainingSplitPage({
   const isLocked = submittingSummary;
   const isWaiting = isWaitingAnswer || submittingQuestion;
   const canSendQuestion = input.trim().length > 0 && !isWaiting && !isLocked;
-  const canSubmitSummary = notes.trim().length > 0 && !submittingSummary;
+  const autoSummary = useMemo(
+    () => buildAutoSummary(trainingCase, messages),
+    [trainingCase, messages],
+  );
+  const canSubmitSummary = questionCount > 0 && !isWaiting && !submittingSummary;
 
   const addBinding = (binding: TrainingBinding) => {
     setBindings((prev) => [...prev.filter((item) => item.id !== binding.id), binding]);
@@ -397,6 +552,7 @@ export function TrainingSplitPage({
       return;
     }
 
+    const currentQuestionIndex = questionCount;
     const userMsg: TrainingMessage = {
       id: `user-${generateUUID()}`,
       role: 'user',
@@ -424,6 +580,23 @@ export function TrainingSplitPage({
 
     let finalJob: AiJob | null = null;
     try {
+      if (isSampleAttempt) {
+        await sleep(120);
+        if (!mountedRef.current) return;
+        const roleAnswer = getSampleRoleAnswer(trainingCase, currentQuestionIndex, text);
+        const answerMsg: TrainingMessage = {
+          id: `ai-${generateUUID()}`,
+          role: 'assistant',
+          speaker: 'role',
+          content: roleAnswer,
+          created_at: new Date().toISOString(),
+        };
+        setMessages((prev) => prev.map((m) => (m.id === waitingId ? answerMsg : m)));
+        setNextHint(trainingProfile.questions[(currentQuestionIndex + 1) % trainingProfile.questions.length]);
+        setFooterNotice(null);
+        return;
+      }
+
       const accepted = await getApiClient().postTrainingQuestion({
         attempt_id: attempt.attempt_id,
         question: text,
@@ -467,12 +640,12 @@ export function TrainingSplitPage({
         const answerMsg: TrainingMessage = {
           id: `ai-${generateUUID()}`,
           role: 'assistant',
-          content: hasAnswer ? roleAnswer! : '对方暂未给出明确回答，可以换个角度继续追问。',
+          content: hasAnswer ? roleAnswer! : '这次没有形成可用回答，请换成一个更具体的问题继续追问。',
           structured_content: hasAnswer
             ? undefined
             : {
-                paragraphs: ['对方暂未给出明确回答。'],
-                bullets: ['可以换个角度继续追问', '也可以先回到当前建议追问'],
+                paragraphs: ['这次没有形成可用回答。'],
+                bullets: ['可以换成一个更具体的问题', '也可以先使用当前建议追问'],
               },
           created_at: new Date().toISOString(),
         };
@@ -498,10 +671,18 @@ export function TrainingSplitPage({
   };
 
   const handleSubmitSummary = async () => {
-    const text = notes.trim();
-    if (!text || submittingSummary) return;
+    const text = autoSummary.trim();
+    if (!text || !canSubmitSummary) return;
     setSubmittingSummary(true);
     try {
+      if (isSampleAttempt) {
+        await sleep(120);
+        onSummarySubmitted(
+          `sample-feedback-${attempt.attempt_id}`,
+          buildSampleFeedback(trainingCase, questionCount),
+        );
+        return;
+      }
       const accepted = await getApiClient().postTrainingSummary({
         attempt_id: attempt.attempt_id,
         summary: text,
@@ -551,7 +732,7 @@ export function TrainingSplitPage({
         <div className="meta" style={{ gap: 8 }}>
           {isSampleAttempt && (
             <span className="app-chip app-chip-muted">
-              示例练习
+              参考练习
             </span>
           )}
         </div>
@@ -600,7 +781,7 @@ export function TrainingSplitPage({
               </Avatar>
               <div className="min-w-0 flex-1">
                 <div className="app-label" style={{ marginBottom: 2 }}>
-                  <span>{isSampleAttempt ? '示例练习 · 角色回应' : '追问练习 · 角色回应'}</span>
+                  <span>{isSampleAttempt ? '参考练习 · 角色回应' : '追问练习 · 角色回应'}</span>
                 </div>
                 <div
                   className="app-title app-title-sm"
@@ -680,7 +861,7 @@ export function TrainingSplitPage({
                 title={caseBinding.detail}
               >
                 <FileText className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
-                加入情境
+                引用案例背景
               </button>
               <span className="text-[11px]" style={{ color: 'var(--aurora-muted)' }}>
                 当前建议：{suggestedQuestion}
@@ -776,7 +957,7 @@ export function TrainingSplitPage({
               style={{ color: 'var(--aurora-gold)' }}
             />
             <span className="app-title app-title-sm">
-              {isSampleAttempt ? '示例练习与总结' : '练习与总结'}
+              {isSampleAttempt ? '参考练习与总结' : '练习与总结'}
             </span>
           </header>
 
@@ -799,7 +980,7 @@ export function TrainingSplitPage({
                   }}
                   aria-expanded={briefOpen}
                 >
-                  <span className="app-title app-title-sm">情境简介</span>
+                  <span className="app-title app-title-sm">案例背景</span>
                   {briefOpen ? (
                     <ChevronUp
                       className="h-4 w-4"
@@ -847,7 +1028,7 @@ export function TrainingSplitPage({
                         }}
                       >
                         {trainingCase.version === 'demo'
-                          ? '示例体验'
+                          ? '参考案例'
                           : `第 ${trainingCase.version} 版`}
                       </span>
                       <button
@@ -856,7 +1037,7 @@ export function TrainingSplitPage({
                         onClick={() => addBinding(caseBinding)}
                         disabled={isLocked || isWaiting}
                       >
-                        加入输入框
+                        引用到输入框
                       </button>
                     </div>
                   </div>
@@ -903,12 +1084,7 @@ export function TrainingSplitPage({
 
               <section className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="training-notes"
-                    className="app-title app-title-sm"
-                  >
-                    总结草稿
-                  </label>
+                  <h2 className="app-title app-title-sm">系统整理</h2>
                   <span
                     style={{
                       fontSize: 11,
@@ -916,19 +1092,22 @@ export function TrainingSplitPage({
                       fontFamily: 'var(--font-ibm-plex-mono), monospace',
                     }}
                   >
-                    提交后生成反馈
+                    可直接生成反馈
                   </span>
                 </div>
-                <textarea
-                  id="training-notes"
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  disabled={isLocked}
-                  placeholder="把你已经问清楚的目标、角色、场景、边界和验收口径整理成一段总结。"
-                  rows={8}
-                  className="app-textarea"
-                  style={{ minHeight: 180 }}
-                />
+                <div
+                  className="app-card app-card-pad"
+                  style={{
+                    minHeight: 150,
+                    background: 'rgba(255,255,255,0.34)',
+                    whiteSpace: 'pre-wrap',
+                    color: 'var(--aurora-ink-soft)',
+                    fontSize: 13,
+                    lineHeight: 1.7,
+                  }}
+                >
+                  {autoSummary}
+                </div>
               </section>
 
               <section className="flex flex-col gap-2">
@@ -953,7 +1132,7 @@ export function TrainingSplitPage({
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
-                  {submittingSummary ? '正在生成反馈…' : '提交并查看反馈'}
+                  {submittingSummary ? '正在生成反馈…' : '查看练习反馈'}
                 </button>
                 <p
                   style={{

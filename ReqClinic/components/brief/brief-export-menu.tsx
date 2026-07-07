@@ -6,12 +6,10 @@ import {
   ChevronDown,
   Copy,
   Download,
-  FileDown,
   FileText,
   Loader2,
 } from 'lucide-react';
 import { getApiClient } from '@/lib/api';
-import type { BriefExport } from '@/lib/api/types';
 import { useToast } from '@/components/ui';
 
 interface BriefExportMenuProps {
@@ -19,26 +17,19 @@ interface BriefExportMenuProps {
   briefVersion: number;
   /** 简报纯文本内容，用于复制到剪贴板 */
   briefContent: string;
+  title?: string;
   className?: string;
-}
-
-type ExportFormat = 'markdown' | 'pdf';
-
-interface ExportRecord {
-  exportId: string;
-  expiresAt: string;
-  format: ExportFormat;
 }
 
 export function BriefExportMenu({
   sessionId,
   briefVersion,
   briefContent,
+  title,
   className,
 }: BriefExportMenuProps) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<ExportFormat | null>(null);
-  const [exportRecord, setExportRecord] = useState<ExportRecord | null>(null);
+  const [busy, setBusy] = useState<'copy' | 'markdown' | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
@@ -60,14 +51,29 @@ export function BriefExportMenu({
     };
   }, [open]);
 
+  const resolveProfessionalReport = async (): Promise<string> => {
+    const current = briefContent.trim();
+    if (current) return current;
+    const view = await getApiClient().getBriefView({
+      session_id: sessionId,
+      brief_version: briefVersion,
+      view_type: 'exec',
+    });
+    return view.content.trim();
+  };
+
   const handleCopy = async () => {
+    if (busy) return;
+    setBusy('copy');
     try {
+      const content = await resolveProfessionalReport();
+      if (!content) throw new Error('empty');
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(briefContent);
+        await navigator.clipboard.writeText(content);
       } else {
         // 兜底：使用 textarea
         const ta = document.createElement('textarea');
-        ta.value = briefContent;
+        ta.value = content;
         ta.style.position = 'fixed';
         ta.style.opacity = '0';
         document.body.appendChild(ta);
@@ -80,83 +86,57 @@ export function BriefExportMenu({
       showToast({ type: 'error', title: '复制失败', description: '请手动选择文本复制' });
     } finally {
       setOpen(false);
+      setBusy(null);
     }
   };
 
-  const handleDownload = async (format: ExportFormat) => {
+  const handleDownload = async () => {
     if (busy) return;
-    setBusy(format);
+    setBusy('markdown');
     try {
-      const api = getApiClient();
-      // 第一步：申请导出
-      const exportRes: BriefExport = await api.exportQuickSessionBrief({
-        session_id: sessionId,
-        brief_version: briefVersion,
-        formats: [format],
-      });
-      setExportRecord({
-        exportId: exportRes.export_id,
-        expiresAt: exportRes.expires_at,
-        format,
-      });
-      // 第二步：获取下载链接
-      const result = await api.downloadQuickSessionBrief({
-        export_id: exportRes.export_id,
-        format,
-      });
-      // 运行时 result 实际可能是 { download_url: string }，做兼容处理
-      const downloadUrl =
-        typeof result === 'string'
-          ? result
-          : (result as unknown as { download_url?: string }).download_url ??
-            '';
-      if (!downloadUrl) {
-        throw new Error('未获取到下载链接');
+      const content = await resolveProfessionalReport();
+      if (!content) {
+        throw new Error('empty');
       }
-      // 触发浏览器下载
+      const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `需求简报-${briefVersion}.${format === 'pdf' ? 'pdf' : 'md'}`;
+      a.href = url;
+      a.download = `${safeFileName(title || '需求简报')}-v${briefVersion}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       showToast({
         type: 'success',
-        title: format === 'pdf' ? '版式文件下载已开始' : '文本文件下载已开始',
+        title: '专业报告下载已开始',
       });
     } catch {
       showToast({
         type: 'error',
         title: '导出失败',
-        description: '请稍后重试',
+        description: '专业报告还没有准备好，请稍后再试。',
       });
     } finally {
-      setBusy(null);
       setOpen(false);
+      setBusy(null);
     }
   };
 
   const menuItems: {
-    key: ExportFormat | 'copy';
+    key: 'copy' | 'markdown';
     label: string;
     icon: typeof Copy;
     onClick: () => void | Promise<void>;
     loading?: boolean;
   }[] = [
-    { key: 'copy', label: '复制到剪贴板', icon: Copy, onClick: handleCopy },
+    { key: 'copy', label: '复制专业报告', icon: Copy, onClick: handleCopy, loading: busy === 'copy' },
     {
       key: 'markdown',
-      label: '下载文本文件',
+      label: '下载 Markdown 文档',
       icon: FileText,
-      onClick: () => handleDownload('markdown'),
+      onClick: handleDownload,
       loading: busy === 'markdown',
-    },
-    {
-      key: 'pdf',
-      label: '下载版式文件',
-      icon: FileDown,
-      onClick: () => handleDownload('pdf'),
-      loading: busy === 'pdf',
     },
   ];
 
@@ -224,30 +204,16 @@ export function BriefExportMenu({
               </button>
             );
           })}
-          {exportRecord && (
-            <div
-              className="mt-1 px-3 py-2"
-              style={{ borderTop: '1px solid var(--aurora-hair)' }}
-            >
-              <p
-                className="text-[11px]"
-                style={{ color: 'var(--aurora-muted)' }}
-              >
-                导出编号：
-                <span style={{ fontFamily: 'var(--font-mono)' }}>
-                  {exportRecord.exportId.slice(0, 8)}…
-                </span>
-              </p>
-              <p
-                className="text-[11px]"
-                style={{ color: 'var(--aurora-muted)' }}
-              >
-                过期时间：{new Date(exportRecord.expiresAt).toLocaleString('zh-CN')}
-              </p>
-            </div>
-          )}
         </div>
       )}
     </div>
   );
+}
+
+function safeFileName(value: string): string {
+  const cleaned = value
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, '')
+    .trim();
+  return cleaned || '需求简报';
 }

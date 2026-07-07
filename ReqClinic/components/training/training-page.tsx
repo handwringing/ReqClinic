@@ -30,6 +30,27 @@ const FEEDBACK_STATES: TrainingAttempt['status'][] = [
   'completed',
 ];
 
+const SAMPLE_FEEDBACK_KEY_PREFIX = 'reqclinic:training-sample-feedback:';
+
+function readStoredSampleFeedback(attemptId: string): TrainingFeedback | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(`${SAMPLE_FEEDBACK_KEY_PREFIX}${attemptId}`);
+    return raw ? (JSON.parse(raw) as TrainingFeedback) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSampleFeedback(attemptId: string, feedback: TrainingFeedback): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(`${SAMPLE_FEEDBACK_KEY_PREFIX}${attemptId}`, JSON.stringify(feedback));
+  } catch {
+    // Local demo recovery only.
+  }
+}
+
 function trainingSourceFromRoute(value?: string): TrainingAttempt['source_kind'] | undefined {
   if (value === 'sample' || value === 'custom') return value;
   return undefined;
@@ -65,7 +86,15 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
           ...a,
           source_kind: a.source_kind ?? routeSourceKind,
         };
-        setAttempt(normalizedAttempt);
+        const storedSampleFeedback =
+          normalizedAttempt.source_kind === 'sample'
+            ? readStoredSampleFeedback(attemptId)
+            : null;
+        setAttempt(
+          storedSampleFeedback
+            ? { ...normalizedAttempt, status: 'feedback_ready' }
+            : normalizedAttempt,
+        );
         const versionDetail = await getApiClient().getTrainingCaseVersion(normalizedAttempt.case_id, normalizedAttempt.case_version);
         if (cancelled) return;
         // 将版本详情映射为 TrainingCase 以保留展示字段。
@@ -78,7 +107,9 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
           description: versionDetail.description,
         };
         setTrainingCase(c);
-        if (FEEDBACK_STATES.includes(normalizedAttempt.status)) {
+        if (storedSampleFeedback) {
+          setFeedback(storedSampleFeedback);
+        } else if (FEEDBACK_STATES.includes(normalizedAttempt.status)) {
           const fb = await getApiClient().getTrainingFeedback(attemptId);
           if (cancelled) return;
           setFeedback(fb);
@@ -155,10 +186,20 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
     };
   }, [summarySubmitted, attempt, attemptId, routeSourceKind, summaryJobId]);
 
-  const handleSummarySubmitted = useCallback((jobId: string) => {
+  const handleSummarySubmitted = useCallback((jobId: string, localFeedback?: TrainingFeedback) => {
+    if (localFeedback) {
+      writeStoredSampleFeedback(attemptId, localFeedback);
+      setFeedback(localFeedback);
+      setAttempt((current) =>
+        current ? { ...current, status: 'feedback_ready' } : current,
+      );
+      setSummarySubmitted(false);
+      setSummaryJobId(null);
+      return;
+    }
     setSummaryJobId(jobId);
     setSummarySubmitted(true);
-  }, []);
+  }, [attemptId]);
 
   const handleRetry = useCallback(async () => {
     if (!attempt) return;

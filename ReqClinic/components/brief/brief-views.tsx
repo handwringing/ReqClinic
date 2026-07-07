@@ -3,7 +3,6 @@
 import { clsx } from 'clsx';
 import {
   CheckSquare,
-  Download,
   FileText,
   ListChecks,
   Loader2,
@@ -15,7 +14,7 @@ import type { BriefView, BriefViewType } from '@/lib/api/types';
 import { ErrorState } from '@/components/ui';
 
 type ViewTab = {
-  type: BriefViewType | 'export';
+  type: BriefViewType;
   label: string;
   icon: typeof ListChecks;
 };
@@ -23,7 +22,6 @@ type ViewTab = {
 const VIEW_TABS: ViewTab[] = [
   { type: 'simple', label: '普通概述', icon: ListChecks },
   { type: 'exec', label: '专业报告', icon: FileText },
-  { type: 'export', label: '导出文档', icon: Download },
 ];
 
 interface BriefViewsProps {
@@ -34,7 +32,7 @@ interface BriefViewsProps {
 }
 
 export function BriefViews({ sessionId, version, onViewDataChange }: BriefViewsProps) {
-  const [activeView, setActiveView] = useState<BriefViewType | 'export'>('simple');
+  const [activeView, setActiveView] = useState<BriefViewType>('simple');
   const [viewData, setViewData] = useState<BriefView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -71,10 +69,10 @@ export function BriefViews({ sessionId, version, onViewDataChange }: BriefViewsP
     void loadView('simple');
   }, [loadView]);
 
-  const handleTabChange = (viewType: BriefViewType | 'export') => {
+  const handleTabChange = (viewType: BriefViewType) => {
     if (viewType === activeView || loading) return;
     setActiveView(viewType);
-    void loadView(viewType === 'export' ? 'exec' : viewType);
+    void loadView(viewType);
   };
 
   return (
@@ -124,10 +122,8 @@ export function BriefViews({ sessionId, version, onViewDataChange }: BriefViewsP
             title="视图加载失败"
             description={error.message}
             requestId={requestIdRef.current}
-            onRetry={() => void loadView(activeView === 'export' ? 'exec' : activeView)}
+            onRetry={() => void loadView(activeView)}
           />
-        ) : viewData && activeView === 'export' ? (
-          <ExportDocumentView view={viewData} />
         ) : viewData ? (
           <ViewRenderer view={viewData} />
         ) : null}
@@ -519,21 +515,6 @@ function ExecView({ view }: { view: BriefView }) {
           </div>
         );
       })}
-    </article>
-  );
-}
-
-function ExportDocumentView({ view }: { view: BriefView }) {
-  return (
-    <article className="brief-export-document">
-      <header className="brief-export-document__head">
-        <div className="app-label">导出文档</div>
-        <h3>可复制的专业需求文档</h3>
-        <p>
-          内容与专业报告同源，适合复制到协作文档、评审材料或后续 PDF 排版中。
-        </p>
-      </header>
-      <MarkdownBriefContent content={view.content} variant="exec" />
     </article>
   );
 }

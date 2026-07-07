@@ -212,7 +212,7 @@ export function TrainingFeedbackPage({
             <div className="flex flex-wrap justify-end gap-2">
               {isSampleAttempt && (
                 <span className="app-chip app-chip-muted">
-                  示例练习
+                  参考练习
                 </span>
               )}
               {isCompleted && (

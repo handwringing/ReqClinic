@@ -46,8 +46,8 @@ export function BriefTopbar({
 }: BriefTopbarProps) {
   const router = useRouter();
   const isDraft = status === 'draft';
-  const upgradeLabel = isSampleSession ? '进入示例项目' : '升级正式项目';
-  const pendingLabel = isSampleSession ? '正在打开' : '正在升级';
+  const upgradeLabel = '升级正式项目';
+  const pendingLabel = '正在升级';
 
   return (
     <header className={clsx('app-topbar', className)}>
@@ -106,7 +106,7 @@ export function BriefTopbar({
         </span>
         {isSampleSession && (
           <span className="app-chip app-chip-muted" style={{ flexShrink: 0 }}>
-            示例简报
+            参考案例
           </span>
         )}
       </div>
@@ -117,6 +117,7 @@ export function BriefTopbar({
           sessionId={sessionId}
           briefVersion={version}
           briefContent={briefContent}
+          title={title}
         />
         <button
           type="button"

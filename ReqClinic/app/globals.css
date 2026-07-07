@@ -1451,8 +1451,11 @@ body {
   left: 184px;
   right: 30px;
   top: 50%;
+  z-index: 0;
   height: 1px;
   background: linear-gradient(90deg, rgba(168,133,47,0.48), var(--aurora-hair-strong));
+  opacity: 0.42;
+  pointer-events: none;
 }
 .formal-map-main-root {
   position: relative;
@@ -1480,6 +1483,7 @@ body {
 }
 .formal-map-main-branches {
   position: relative;
+  z-index: 1;
   display: grid;
   min-height: 0;
   max-height: 100%;
@@ -2409,7 +2413,7 @@ button.app-card:focus-visible {
 }
 .training-entry-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
 }

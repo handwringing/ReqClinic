@@ -156,10 +156,8 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
       }
       showToast({
         type: 'info',
-        title: isSampleSession ? '正在打开示例项目' : '正在创建正式项目',
-        description: isSampleSession
-          ? '稍后进入示例项目工作台查看完整地图。'
-          : '稍后进入正式项目工作台查看完整地图。',
+        title: '正在生成正式项目地图',
+        description: '稍后进入正式项目工作台继续深化。',
       });
     } catch (e) {
       const err = e as Error;
@@ -167,9 +165,7 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
         showToast({
           type: 'info',
           title: '简报内容刚刚更新',
-          description: isSampleSession
-            ? '我已重新读取最新内容，你可以再点击一次进入示例项目。'
-            : '我已重新读取最新内容，你可以再点击一次升级正式项目。',
+          description: '我已重新读取最新内容，你可以再点击一次升级正式项目。',
         });
         await loadBrief();
         return;

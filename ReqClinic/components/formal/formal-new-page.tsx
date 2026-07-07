@@ -12,7 +12,7 @@ const FORMAL_DEMO_CASES = [
     id: 'aster',
     label: '园区访客通行',
     title: '园区访客预约与通行',
-    badge: '示例体验',
+    badge: '参考案例',
     description:
       '园区希望替代纸质访客登记。访客提前预约后，到现场用凭证码扫码通行；安保需要能核验、处理异常并留下记录。项目计划在下个月峰会前上线第一版。',
     roles: '园区运营负责人：确认目标与上线范围；安保主管：确认现场流程；前台行政：提供访客登记材料',
@@ -23,7 +23,7 @@ const FORMAL_DEMO_CASES = [
     id: 'outsourcing',
     label: '企业官网外包',
     title: '企业官网外包采购',
-    badge: '示例体验',
+    badge: '参考案例',
     description:
       '公司计划找外包团队重做企业官网。官网需要展示产品、案例、公司介绍并收集客户线索；希望在签约前把工作范围、交付物、验收标准和排除项说清楚，减少返工和报价争议。',
     roles: '市场负责人：确认品牌与内容；销售负责人：确认线索表单；外包项目经理：确认交付计划；法务：确认合同边界',
@@ -34,7 +34,7 @@ const FORMAL_DEMO_CASES = [
     id: 'capstone',
     label: '多人毕业设计',
     title: '智能面试助手毕业设计',
-    badge: '示例体验',
+    badge: '参考案例',
     description:
       '三人小组要做一个智能面试助手毕业设计，目标是在答辩时展示可运行系统。第一版需要覆盖模拟面试、回答记录、评分反馈和答辩说明，但不能采集真实面试数据。',
     roles: '组长：范围和答辩材料；前端同学：交互与页面；后端同学：接口与数据库；算法同学：模型调用与评分提示词；指导老师：关键节点确认',
@@ -264,7 +264,7 @@ export function FormalNewPage() {
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="app-label">示例不会替代你的输入</span>
+              <span className="app-label">进入后由问诊助手继续拆解需求地图</span>
               <button
                 type="button"
                 className="app-btn-primary"
@@ -290,15 +290,15 @@ export function FormalNewPage() {
           </div>
         </section>
 
-        <section className="formal-demo-panel" aria-label="正式项目示例体验">
+        <section className="formal-demo-panel" aria-label="正式项目参考案例">
           <div>
             <div className="app-label" style={{ marginBottom: 10 }}>
               <Sparkles className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
-              示例体验
+              参考案例
             </div>
-            <h2 className="app-title app-title-md">查看示例工作台</h2>
+            <h2 className="app-title app-title-md">查看参考工作台</h2>
             <p className="formal-demo-panel__desc">
-              示例会进入独立工作台，不会写入左侧项目表单，也不会冒充你的项目输入。
+              直接查看一份已经整理好的需求地图，快速了解正式项目工作台的分析方式。
             </p>
           </div>
 

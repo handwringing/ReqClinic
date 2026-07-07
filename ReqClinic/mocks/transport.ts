@@ -16,7 +16,7 @@ export class MockTransport implements ApiTransport {
     request?: TReq,
     options?: { idempotencyKey?: string; signal?: AbortSignal }
   ): Promise<TRes> {
-    await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 150));
+    await new Promise(resolve => setTimeout(resolve, 20 + Math.random() * 40));
 
     const handler = this.registry.get(operationId);
     if (!handler) {
@@ -44,10 +44,9 @@ export class MockTransport implements ApiTransport {
     this.jobs.set(jobId, job);
 
     const steps: { delay: number; status: JobStatus; progress: number; step: string }[] = [
-      { delay: 500, status: 'running', progress: 30, step: '分析中…' },
-      { delay: 1500, status: 'running', progress: 60, step: '生成结果…' },
-      { delay: 2500, status: 'validating', progress: 80, step: '校验中…' },
-      { delay: 3500, status: 'succeeded', progress: 100, step: '完成' },
+      { delay: 60, status: 'running', progress: 40, step: '整理中…' },
+      { delay: 140, status: 'validating', progress: 80, step: '同步结果…' },
+      { delay: 240, status: 'succeeded', progress: 100, step: '完成' },
     ];
 
     steps.forEach(({ delay, status, progress, step }) => {

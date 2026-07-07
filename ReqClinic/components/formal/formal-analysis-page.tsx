@@ -866,7 +866,7 @@ function FormalMapWorkspace({
             lineHeight: 1.55,
           }}
         >
-          当前为示例工作台，不会当作你的项目输入；需要创建自己的项目，请回到“项目起点输入”入口。
+          当前为参考工作台，用于查看需求地图的分析方式；创建自己的项目请回到“项目起点输入”。
         </div>
       )}
 
@@ -1071,7 +1071,7 @@ function FormalMapWorkspace({
                 className={reportTab === 'export' ? 'is-active' : ''}
                 onClick={() => setReportTab('export')}
               >
-                导出文档
+                导出专业报告
               </button>
             </div>
             <section className="formal-report-modal__body">
@@ -1080,7 +1080,7 @@ function FormalMapWorkspace({
                   <header className="brief-export-document__head">
                     <div className="app-label">
                       <Download className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
-                      导出文档
+                      导出专业报告
                     </div>
                     <h3>可复制的正式项目需求文档</h3>
                     <p>

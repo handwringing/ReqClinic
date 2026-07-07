@@ -196,21 +196,21 @@ export function BriefContent({
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <span className="app-chip app-chip-sage">
-                  示例体验
+                  参考案例
                 </span>
                 <h2
                   id="brief-flow-end-title"
                   className="font-display text-[18px] font-semibold"
                   style={{ color: 'var(--aurora-ink)' }}
                 >
-                  当前示例已演示完成
+                  当前参考案例已演示完成
                 </h2>
               </div>
               <p
                 className="text-[13px] leading-relaxed"
                 style={{ color: 'var(--aurora-ink-soft)' }}
               >
-                这个示例的引导步骤已经结束，继续补充暂时不会生成新的内容。你可以回到首页体验其他示例，也可以留在这里继续查看报告。
+                这个参考案例的引导步骤已经结束，继续补充暂时不会生成新的内容。你可以回到首页体验其他案例，也可以留在这里继续查看报告。
               </p>
               <div className="mt-2 flex flex-wrap justify-end gap-2">
                 <button

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, GraduationCap, Loader2, PlayCircle, Sparkles } from 'lucide-react';
+import { ArrowLeft, GraduationCap, Loader2, PlayCircle } from 'lucide-react';
 import { getApiClient } from '@/lib/api';
 import type { TrainingCase, UUID } from '@/lib/api/types';
 import { ProductBrandText } from '@/components/common/product-brand';
@@ -27,14 +27,27 @@ const difficultyLabel: Record<DifficultyKey, string> = {
   hard: '挑战',
 };
 
+const difficultyOrder: Record<DifficultyKey, number> = {
+  easy: 0,
+  medium: 1,
+  hard: 2,
+};
+
 export function TrainingCaseSelect() {
   const router = useRouter();
   const [cases, setCases] = useState<TrainingCase[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [busyId, setBusyId] = useState<UUID | null>(null);
-  const [customPrompt, setCustomPrompt] = useState('');
-  const [customNotice, setCustomNotice] = useState('');
+  const sortedCases = useMemo(
+    () =>
+      [...(cases ?? [])].sort((a, b) => {
+        const diff = difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty];
+        if (diff !== 0) return diff;
+        return a.title.localeCompare(b.title, 'zh-CN');
+      }),
+    [cases],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -150,7 +163,7 @@ export function TrainingCaseSelect() {
                 fontSize: 14,
               }}
             >
-              选择一个固定情境练习追问。当前版本也可以先写下自己的练习场景，但暂时不会创建自定义回合。
+              选择一个练习案例，按建议追问一步步练习如何把模糊表达问清楚。当前练习不会影响任何项目内容。
             </p>
           </div>
           <span
@@ -163,61 +176,19 @@ export function TrainingCaseSelect() {
               padding: '8px 12px',
             }}
           >
-            当前版本先开放固定情境练习。
+            按入门、进阶、挑战排序。
           </span>
         </header>
 
         <section className="training-entry-layout" aria-label="表达训练入口">
-          <div className="app-card app-card-pad training-custom-entry">
-            <div className="app-label" style={{ marginBottom: 10 }}>
-              <Sparkles size={14} strokeWidth={1.5} aria-hidden="true" />
-              自定义场景
-            </div>
-            <h2 className="app-title app-title-md">用自己的场景练习追问</h2>
-            <p className="training-entry-desc">
-              这里用于记录你想练习的场景。当前版本暂未开放自定义回合，输入内容不会提交。
-            </p>
-            <textarea
-              className="app-textarea"
-              value={customPrompt}
-              onChange={(event) => {
-                setCustomPrompt(event.target.value.slice(0, 1000));
-                if (customNotice) setCustomNotice('');
-              }}
-              placeholder="描述你想练习澄清的场景，例如：团队只说想提升转化率，我想练习怎么追问目标、角色、边界和验收。"
-              rows={5}
-              style={{ minHeight: 132 }}
-              aria-label="真实训练场景输入"
-            />
-            <div className="training-entry-actions">
-              <span className="app-label">{customPrompt.length}/1000</span>
-              <button
-                type="button"
-                className="app-btn-primary"
-                onClick={() => setCustomNotice('当前版本暂未开放自定义练习。你可以先选择右侧示例体验；刚才输入的内容不会提交。')}
-              >
-                开始自定义练习
-              </button>
-            </div>
-            {customNotice && (
-              <div
-                role="alert"
-                className="app-chip app-chip-muted"
-                style={{ alignSelf: 'flex-start', whiteSpace: 'normal', lineHeight: 1.55 }}
-              >
-                {customNotice}
-              </div>
-            )}
-          </div>
-
           <div className="training-demo-entry">
             <div className="app-label" style={{ marginBottom: 10 }}>
               <PlayCircle size={14} strokeWidth={1.5} aria-hidden="true" />
-              示例体验
+              参考案例
             </div>
-            <h2 className="app-title app-title-md">选择一个练习情境</h2>
+            <h2 className="app-title app-title-md">选择一个练习案例</h2>
             <p className="training-entry-desc">
-              示例会创建独立练习回合，教练给出当前建议追问；角色只回答你问到的信息，反馈会指出遗漏维度。
+              每个案例都有明确背景、建议追问和反馈结果。你只需要按步骤练习，系统会自动整理总结。
             </p>
           </div>
 
@@ -242,9 +213,9 @@ export function TrainingCaseSelect() {
                   </div>
                 }
               >
-                {(cases ?? []).length === 0 ? (
+                {sortedCases.length === 0 ? (
                   <div className="app-card app-card-pad app-state-box">
-                    <p className="desc">暂无练习情境</p>
+                    <p className="desc">暂无练习案例</p>
                     <button
                       type="button"
                       className="app-btn-ghost"
@@ -262,7 +233,7 @@ export function TrainingCaseSelect() {
                       alignItems: 'stretch',
                     }}
                   >
-                    {(cases ?? []).map((c) => {
+                    {sortedCases.map((c) => {
                       const isBusy = busyId === c.id;
                       return (
                         <button
