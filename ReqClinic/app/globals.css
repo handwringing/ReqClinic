@@ -1142,6 +1142,12 @@ body {
   background: rgba(168,133,47,0.10);
   color: var(--aurora-gold);
 }
+.training-mobile-feedback-action {
+  display: none;
+  width: 100%;
+  margin-top: 10px;
+  justify-content: center;
+}
 
 .quick-visual-card {
   transform: translateY(0);
@@ -2982,6 +2988,9 @@ button.app-chip,
   }
   .training-split-panel {
     min-height: auto;
+  }
+  .training-mobile-feedback-action {
+    display: inline-flex;
   }
   /* 反馈页移动端自适应 */
   .training-feedback-main {

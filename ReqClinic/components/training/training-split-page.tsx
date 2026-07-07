@@ -1186,6 +1186,20 @@ export function TrainingSplitPage({
                 {isWaiting ? '发送中…' : '发送'}
               </button>
             </div>
+            <button
+              type="button"
+              className="app-btn-primary training-mobile-feedback-action"
+              disabled={!canSubmitSummary}
+              onClick={() => void handleSubmitSummary()}
+              aria-busy={submittingSummary || undefined}
+            >
+              <Sparkles
+                className="h-4 w-4"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              {submittingSummary ? '正在生成反馈…' : '查看练习反馈'}
+            </button>
           </footer>
         </section>
 
