@@ -73,19 +73,26 @@ export function BriefExportMenu({
     try {
       const content = await resolveProfessionalReport();
       if (!content) throw new Error('empty');
+      let copied = false;
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(content);
-      } else {
-        // 兜底：使用 textarea
+        try {
+          await navigator.clipboard.writeText(content);
+          copied = true;
+        } catch {
+          copied = false;
+        }
+      }
+      if (!copied) {
         const ta = document.createElement('textarea');
         ta.value = content;
         ta.style.position = 'fixed';
         ta.style.opacity = '0';
         document.body.appendChild(ta);
         ta.select();
-        document.execCommand('copy');
+        copied = document.execCommand('copy');
         document.body.removeChild(ta);
       }
+      if (!copied) throw new Error('copy-failed');
       showToast({ type: 'success', title: '已复制到剪贴板' });
     } catch {
       showToast({ type: 'error', title: '复制失败', description: '请手动选择文本复制' });
