@@ -225,6 +225,12 @@ function storeSampleBriefs(store: MockSessionStore, sessionId: string, fx: any):
   }
 }
 
+function sourceCaseIdFromStaticSessionId(sessionId?: string | null): string | null {
+  const prefix = 'quick-sample-';
+  if (!sessionId?.startsWith(prefix)) return null;
+  return sessionId.slice(prefix.length) || null;
+}
+
 function buildCurrentSampleFixture(store: MockSessionStore, session: QuickSession): any {
   return buildQuickDemoFixture(session.source_case_id, getUnderstanding(store, session.id));
 }
@@ -965,6 +971,17 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
       const views = getBriefViews(store, request.session_id);
       const existing = views[`${request.brief_version}:${request.view_type}`] ?? views[request.view_type];
       if (existing) return existing;
+      const sourceCaseId = sourceCaseIdFromStaticSessionId(request.session_id);
+      if (sourceCaseId && getQuickDemoCase(sourceCaseId)) {
+        const fx = buildQuickDemoFixture(sourceCaseId);
+        const view = fx.brief_views?.[request.view_type];
+        if (view) {
+          return {
+            ...view,
+            brief_version: request.brief_version,
+          } as BriefView;
+        }
+      }
       // 生成默认视图。
       const contentByType: Record<BriefViewType, string> = {
         simple: '# 需求简报（概述）\n\n本简报基于快速问诊澄清结果生成，包含目标、用户、场景与完成标准。',
