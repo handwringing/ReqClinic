@@ -289,10 +289,16 @@ export function QuickVisualization({
     const rect = target.getBoundingClientRect();
     const width = Math.min(Math.max(rect.width, 220), 320);
     const left = Math.min(Math.max(12, rect.left), window.innerWidth - width - 12);
-    const estimatedHeight = 176;
+    const estimatedHeight = 132;
     const hasRoomBelow = rect.bottom + 8 + estimatedHeight < window.innerHeight;
-    const placement = hasRoomBelow || rect.top < estimatedHeight ? 'bottom' : 'top';
-    const top = placement === 'bottom' ? rect.bottom + 8 : rect.top - 8;
+    const placement = hasRoomBelow ? 'bottom' : 'top';
+    const rawTop = placement === 'bottom'
+      ? rect.bottom + 8
+      : rect.top - estimatedHeight - 8;
+    const top = Math.min(
+      Math.max(12, rawTop),
+      Math.max(12, window.innerHeight - estimatedHeight - 12),
+    );
     setFloatingMenu({ card, top, left, width, placement });
   };
 
@@ -764,10 +770,8 @@ export function QuickVisualization({
                 top: floatingMenu.top,
                 left: floatingMenu.left,
                 width: floatingMenu.width,
-                transform:
-                  floatingMenu.placement === 'top'
-                    ? 'translateY(-100%)'
-                    : undefined,
+                maxHeight: 'calc(100vh - 24px)',
+                overflowY: 'auto',
                 background: 'var(--aurora-card-bg)',
                 border: '1px solid var(--aurora-card-border)',
                 boxShadow: '0 18px 45px rgba(35,31,22,0.16)',

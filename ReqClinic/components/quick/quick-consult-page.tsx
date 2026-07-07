@@ -2,9 +2,18 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { getApiClient } from '@/lib/api';
-import { quickDemoCardTitle, quickDemoReview, quickDemoSupplement } from '@/lib/quick-demo-cases';
+import {
+  buildQuickDemoFixture,
+  getQuickDemoCase,
+  quickDemoCardTitle,
+  quickDemoReview,
+  quickDemoSupplement,
+} from '@/lib/quick-demo-cases';
+import { quickStaticSessionId } from '@/lib/static-demo-ids';
 import type {
   CoverageSlot,
+  CoverageSlotName,
+  CoverageSlotState,
   QuickSession,
   QuickSessionTurn,
   QuickSessionUnderstanding,
@@ -46,6 +55,75 @@ function fallbackTurns(session: QuickSession): QuickSessionTurn[] {
   ];
 }
 
+function sourceCaseIdFromStaticSession(sessionId: string): string | null {
+  const prefix = 'quick-sample-';
+  return sessionId.startsWith(prefix) ? sessionId.slice(prefix.length) : null;
+}
+
+function buildStaticQuickInitial(sessionId: string): {
+  session: QuickSession;
+  messages: QuickSessionTurn[];
+  coverage: CoverageSlot[];
+  understanding: QuickSessionUnderstanding;
+  unknowns: QuickSessionUnknown[];
+} | null {
+  const sourceCaseId = sourceCaseIdFromStaticSession(sessionId);
+  const demoCase = getQuickDemoCase(sourceCaseId);
+  if (!sourceCaseId || !demoCase || quickStaticSessionId(sourceCaseId) !== sessionId) return null;
+
+  const fixture = buildQuickDemoFixture(sourceCaseId);
+  const now = '2026-07-07T00:00:00.000Z';
+  const firstAssistant = fixture.messages.find((turn) => turn.role === 'assistant');
+  const coverage = fixture.coverage.map((slot) => ({
+    name: slot.name as CoverageSlotName,
+    label: slot.label,
+    state: slot.state as CoverageSlotState,
+    is_blocking: slot.is_blocking,
+  }));
+  const session: QuickSession = {
+    id: sessionId,
+    version: 1,
+    status: 'clarifying',
+    source_kind: 'sample',
+    source_case_id: sourceCaseId,
+    original_input: fixture.original_input,
+    current_understanding_version: 0,
+    brief_version: 0,
+    created_at: now,
+    updated_at: now,
+  };
+
+  return {
+    session,
+    messages: firstAssistant
+      ? [
+          {
+            id: firstAssistant.id,
+            session_id: sessionId,
+            role: firstAssistant.role,
+            content: firstAssistant.content,
+            structured_content: firstAssistant.structured_content,
+            source_refs: firstAssistant.source_refs,
+            update_marks: firstAssistant.update_marks,
+            follow_ups: firstAssistant.follow_ups,
+            created_at: firstAssistant.created_at ?? now,
+          },
+        ]
+      : [],
+    coverage,
+    understanding: {
+      session_id: sessionId,
+      version: 0,
+      summary: `已载入${fixture.title}，助手会按当前流程逐步追问。`,
+      slots: {
+        expected_outcome: fixture.understanding.slots.expected_outcome,
+      },
+      coverage_slots: coverage,
+    },
+    unknowns: [],
+  };
+}
+
 export interface QuickConsultPageProps {
   sessionId: string;
 }
@@ -59,11 +137,12 @@ export function QuickConsultPage({ sessionId }: QuickConsultPageProps) {
 }
 
 function QuickConsultPageInner({ sessionId }: QuickConsultPageProps) {
-  const [session, setSession] = useState<QuickSession | null>(null);
-  const [messages, setMessages] = useState<QuickSessionTurn[]>([]);
-  const [coverage, setCoverage] = useState<CoverageSlot[] | null>(null);
-  const [understanding, setUnderstanding] = useState<QuickSessionUnderstanding | null>(null);
-  const [unknowns, setUnknowns] = useState<QuickSessionUnknown[] | null>(null);
+  const staticInitial = buildStaticQuickInitial(sessionId);
+  const [session, setSession] = useState<QuickSession | null>(staticInitial?.session ?? null);
+  const [messages, setMessages] = useState<QuickSessionTurn[]>(staticInitial?.messages ?? []);
+  const [coverage, setCoverage] = useState<CoverageSlot[] | null>(staticInitial?.coverage ?? null);
+  const [understanding, setUnderstanding] = useState<QuickSessionUnderstanding | null>(staticInitial?.understanding ?? null);
+  const [unknowns, setUnknowns] = useState<QuickSessionUnknown[] | null>(staticInitial?.unknowns ?? null);
   const [cardBindings, setCardBindings] = useState<QuickCardBinding[]>([]);
   const [advancedView, setAdvancedView] = useState(false);
   const [leftPct, setLeftPct] = useState<number>(readStoredSplit);

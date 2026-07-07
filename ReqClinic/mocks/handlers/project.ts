@@ -3,6 +3,7 @@ import type { MockSessionStore } from '../session-store';
 import type { UUID, Project, ProjectMember, DeleteTask, AiJob } from '@/lib/api/types';
 import { generateUUID } from '@/lib/utils/id';
 import { ApiClientError } from '@/lib/api/errors';
+import { getQuickDemoCase } from '@/lib/quick-demo-cases';
 import { asterFixture } from './_fixtures';
 import {
   FORMAL_CUSTOM_PROJECT_ID,
@@ -65,12 +66,13 @@ function staticProject(projectId: string): Project | null {
   const sourceCaseId = staticFormalProjectSourceCase(projectId);
   const now = '2026-07-07T00:00:00.000Z';
   if (sourceCaseId) {
+    const upgradedCase = getQuickDemoCase(sourceCaseId);
     return {
       id: projectId,
-      title: FORMAL_SAMPLE_TITLES[sourceCaseId] ?? '正式项目示例',
+      title: FORMAL_SAMPLE_TITLES[sourceCaseId] ?? upgradedCase?.title ?? '正式项目示例',
       status: 'reviewing',
       source_kind: projectId.startsWith('formal-upgrade-') ? 'quick_upgrade' : 'sample',
-      source_case_id: FORMAL_STATIC_CASE_IDS.includes(sourceCaseId as any) ? sourceCaseId : null,
+      source_case_id: sourceCaseId,
       version: 1,
       created_by: '00000000-0000-4000-8000-000000000099',
       created_at: now,

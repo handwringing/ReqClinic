@@ -106,6 +106,17 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
     setSummarySubmitted(false);
     setSummaryJobId(null);
 
+    if (staticInitial) {
+      const storedSampleFeedback = readStoredSampleFeedback(attemptId);
+      if (storedSampleFeedback) {
+        setFeedback(storedSampleFeedback);
+        setAttempt({ ...staticInitial.attempt, status: 'feedback_ready' });
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
     (async () => {
       try {
         const a = await getApiClient().getTrainingAttempt(attemptId);

@@ -86,6 +86,7 @@ export function BriefPage({ sessionId }: BriefPageProps) {
 function BriefPageInner({ sessionId }: BriefPageProps) {
   const router = useRouter();
   const initialBrief = buildInitialBriefState(sessionId);
+  const hasInitialBrief = initialBrief !== null;
   const [briefVersion, setBriefVersion] = useState<BriefVersion | null>(initialBrief?.briefVersion ?? null);
   const [versions, setVersions] = useState<BriefVersion[]>(initialBrief?.versions ?? []);
   const [currentVersion, setCurrentVersion] = useState<number>(FALLBACK_LATEST_VERSION);
@@ -102,7 +103,7 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
 
   const loadBrief = useCallback(
     async (version?: number) => {
-      setLoading(true);
+      if (!hasInitialBrief) setLoading(true);
       setError(null);
       try {
         const api = getApiClient();
@@ -161,7 +162,7 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
         setLoading(false);
       }
     },
-    [sessionId],
+    [hasInitialBrief, sessionId],
   );
 
   useEffect(() => {
