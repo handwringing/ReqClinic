@@ -313,7 +313,7 @@ const SAMPLE_FEEDBACK_PROFILES: Record<string, SampleFeedbackProfile> = {
       目标: { evidence: '已开始从论文主题转向研究问题。', comment: '目标应落到课程可评分的研究问题。' },
       对象: { evidence: '课程老师和作业要求还可补问。', comment: '学术任务的确认对象通常是评分规则。' },
       边界: { evidence: '教育阶段、材料来源和论文字数边界还需确认。', comment: '边界决定论文是否可写完。' },
-      验收: { evidence: '还缺少评分标准、引用要求和结构标准。', comment: '验收要对应课程 rubric。' },
+      验收: { evidence: '还缺少评分标准、引用要求和结构标准。', comment: '验收要对应课程评分要求。' },
     },
   },
   服务流程: {
