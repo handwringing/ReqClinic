@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { getApiClient } from '@/lib/api';
 import type { BriefView } from '@/lib/api/types';
+import { buildQuickDemoFixture, getQuickDemoCase } from '@/lib/quick-demo-cases';
 import { useToast } from '@/components/ui';
 
 interface BriefExportMenuProps {
@@ -54,13 +55,16 @@ export function BriefExportMenu({
 
   const resolveProfessionalReport = async (): Promise<string> => {
     const current = briefContent.trim();
-    if (current) return current;
+    if (current && !isGenericExportFallback(current)) return current;
+    const staticSampleReport = resolveStaticSampleReport(sessionId, briefVersion);
+    if (staticSampleReport) return staticSampleReport;
     const view = await getApiClient().getBriefView({
       session_id: sessionId,
       brief_version: briefVersion,
       view_type: 'exec',
     });
-    return formatBriefViewForExport(view).trim();
+    const formatted = formatBriefViewForExport(view).trim();
+    return formatted || current;
   };
 
   const handleCopy = async () => {
@@ -230,4 +234,22 @@ function formatBriefViewForExport(view: BriefView | null): string {
     return [content, sectionText].filter(Boolean).join('\n\n');
   }
   return content || sectionText;
+}
+
+function isGenericExportFallback(content: string): boolean {
+  return /面向导出、评审和后续协作/.test(content) && content.length < 300;
+}
+
+function resolveStaticSampleReport(sessionId: string, briefVersion: number): string {
+  const prefix = 'quick-sample-';
+  if (!sessionId.startsWith(prefix)) return '';
+  const sourceCaseId = sessionId.slice(prefix.length);
+  if (!getQuickDemoCase(sourceCaseId)) return '';
+  const fixture = buildQuickDemoFixture(sourceCaseId);
+  const view = fixture.brief_views?.exec;
+  if (!view) return '';
+  return formatBriefViewForExport({
+    ...view,
+    brief_version: briefVersion,
+  } as BriefView).trim();
 }
