@@ -1,10 +1,11 @@
 export const QUICK_STATIC_CASE_IDS = [
   'ai-poster-website',
-  'family-learning-plan',
-  'paper-topic-selection',
-  'service-renewal-flow',
+  'campus-marketplace',
+  'aigc-education-paper',
+  'gym-renewal-service',
   'corporate-website-outsourcing',
-  'capstone-interview-assistant',
+  'ai-interview-assistant-capstone',
+  'social-anxiety-coach',
 ] as const;
 
 export const FORMAL_STATIC_CASE_IDS = ['aster', 'outsourcing', 'capstone'] as const;
@@ -61,4 +62,3 @@ export function staticTrainingAttemptCase(attemptId: string): string | null {
   }
   return null;
 }
-

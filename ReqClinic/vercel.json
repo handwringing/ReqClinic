@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cross-env NEXT_PUBLIC_API_TRANSPORT=mock next build"
+}

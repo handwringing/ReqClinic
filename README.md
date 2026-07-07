@@ -30,7 +30,7 @@
 
 ## 在线演示
 
-[打开需求问诊室演示版](https://handwringing.github.io/ReqClinic/)
+[打开需求问诊室演示版](https://req-clinic.vercel.app/)
 
 ## 本地预览
 

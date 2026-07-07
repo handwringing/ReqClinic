@@ -21,6 +21,11 @@ import { MarkdownBriefContent } from '@/components/brief/brief-views';
 import { ApiClientError } from '@/lib/api/errors';
 import { getApiClient } from '@/lib/api';
 import { getQuickDemoCase } from '@/lib/quick-demo-cases';
+import {
+  FORMAL_CUSTOM_PROJECT_ID,
+  FORMAL_STATIC_CASE_IDS,
+  staticFormalProjectSourceCase,
+} from '@/lib/static-demo-ids';
 import type { Conflict, FormalMapResponse, FormalMapData, Project, ProjectMember, ProjectSourceKind, Source } from '@/lib/api/types';
 import type {
   QuickDemoGuidanceCanvas,
@@ -52,6 +57,62 @@ type FormalMobilePanel = 'current' | 'map' | 'report';
 
 const POSTER_CASE = getQuickDemoCase('ai-poster-website');
 type FormalTheme = 'service' | 'outsourcing' | 'collaboration' | 'academic' | 'activity' | 'generic';
+
+const FORMAL_SAMPLE_TITLES: Record<string, string> = {
+  aster: '园区访客预约与通行',
+  outsourcing: '企业官网外包采购',
+  capstone: '智能面试助手毕业设计',
+};
+
+function buildStaticProject(projectId: string): Project | null {
+  const now = '2026-07-07T00:00:00.000Z';
+  const sourceCaseId = staticFormalProjectSourceCase(projectId);
+
+  if (sourceCaseId) {
+    const isFormalSample = FORMAL_STATIC_CASE_IDS.includes(sourceCaseId as any);
+    const upgradedCase = getQuickDemoCase(sourceCaseId);
+    return {
+      id: projectId,
+      title: FORMAL_SAMPLE_TITLES[sourceCaseId] ?? upgradedCase?.title ?? '正式项目示例',
+      status: 'reviewing',
+      source_kind: projectId.startsWith('formal-upgrade-') ? 'quick_upgrade' : 'sample',
+      source_case_id: isFormalSample ? sourceCaseId : null,
+      version: 1,
+      created_by: '00000000-0000-4000-8000-000000000099',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
+  if (projectId === FORMAL_CUSTOM_PROJECT_ID) {
+    return {
+      id: projectId,
+      title: '自定义项目示例',
+      status: 'reviewing',
+      source_kind: 'custom',
+      source_case_id: null,
+      version: 1,
+      created_by: '00000000-0000-4000-8000-000000000099',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
+  return null;
+}
+
+function buildInitialPageData(projectId: string): PageData {
+  const staticProject = buildStaticProject(projectId);
+  return {
+    loading: staticProject === null,
+    error: null,
+    project: staticProject,
+    formalMap: null,
+    members: [],
+    sources: [],
+    conflicts: [],
+  };
+}
 
 function isPosterProject(title: string): boolean {
   return /海报|智能海报|网页海报/.test(title);
@@ -547,15 +608,7 @@ export function FormalAnalysisPage({ projectId, routeSource }: FormalAnalysisPag
   const [collapsed, setCollapsed] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [externalBinding, setExternalBinding] = useState<ExternalBinding | undefined>();
-  const [data, setData] = useState<PageData>({
-    loading: true,
-    error: null,
-    project: null,
-    formalMap: null,
-    members: [],
-    sources: [],
-    conflicts: [],
-  });
+  const [data, setData] = useState<PageData>(() => buildInitialPageData(projectId));
 
   useEffect(() => {
     let cancelled = false;

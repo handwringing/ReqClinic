@@ -2,6 +2,7 @@
 **/.next/
 **/.next-build/
 **/.next-pages/
+**/.vercel/
 **/dist/
 **/out/
 **/*.log

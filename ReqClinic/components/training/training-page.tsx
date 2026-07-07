@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiClient } from '@/lib/api';
+import trainingCasesFixture from '@/fixtures/training/cases.json';
+import { staticTrainingAttemptCase } from '@/lib/static-demo-ids';
 import type {
   TrainingAttempt,
   TrainingCase,
@@ -31,6 +33,30 @@ const FEEDBACK_STATES: TrainingAttempt['status'][] = [
 ];
 
 const SAMPLE_FEEDBACK_KEY_PREFIX = 'reqclinic:training-sample-feedback:';
+const TRAINING_FIXTURE_CASES = (trainingCasesFixture as { cases: TrainingCase[] }).cases;
+
+function buildStaticTrainingInitial(attemptId: string): { attempt: TrainingAttempt; trainingCase: TrainingCase } | null {
+  const caseId = staticTrainingAttemptCase(attemptId);
+  const trainingCase = caseId
+    ? TRAINING_FIXTURE_CASES.find((item) => item.id === caseId)
+    : null;
+
+  if (!caseId || !trainingCase) return null;
+
+  return {
+    attempt: {
+      attempt_id: attemptId,
+      case_id: trainingCase.id,
+      case_version: trainingCase.version,
+      source_kind: 'sample',
+      status: 'interviewing',
+      question_count: 0,
+      started_at: '2026-07-07T00:00:00.000Z',
+      completed_at: null,
+    },
+    trainingCase,
+  };
+}
 
 function readStoredSampleFeedback(attemptId: string): TrainingFeedback | null {
   if (typeof window === 'undefined') return null;
@@ -59,10 +85,11 @@ function trainingSourceFromRoute(value?: string): TrainingAttempt['source_kind']
 export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
   const router = useRouter();
   const routeSourceKind = trainingSourceFromRoute(routeSource);
-  const [attempt, setAttempt] = useState<TrainingAttempt | null>(null);
-  const [trainingCase, setTrainingCase] = useState<TrainingCase | null>(null);
+  const staticInitial = buildStaticTrainingInitial(attemptId);
+  const [attempt, setAttempt] = useState<TrainingAttempt | null>(staticInitial?.attempt ?? null);
+  const [trainingCase, setTrainingCase] = useState<TrainingCase | null>(staticInitial?.trainingCase ?? null);
   const [feedback, setFeedback] = useState<TrainingFeedback | null>(null);
-  const [loadStatus, setLoadStatus] = useState<LoadStatus>('loading');
+  const [loadStatus, setLoadStatus] = useState<LoadStatus>(staticInitial ? 'ready' : 'loading');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [summarySubmitted, setSummarySubmitted] = useState(false);
@@ -71,9 +98,10 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
   // 初次挂载：拉取 attempt 与 case
   useEffect(() => {
     let cancelled = false;
-    setLoadStatus('loading');
-    setAttempt(null);
-    setTrainingCase(null);
+    const staticInitial = buildStaticTrainingInitial(attemptId);
+    setLoadStatus(staticInitial ? 'ready' : 'loading');
+    setAttempt(staticInitial?.attempt ?? null);
+    setTrainingCase(staticInitial?.trainingCase ?? null);
     setFeedback(null);
     setSummarySubmitted(false);
     setSummaryJobId(null);

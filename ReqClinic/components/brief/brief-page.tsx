@@ -12,7 +12,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { AppBackground } from '@/components/layout/app-background';
-import { getQuickDemoCase } from '@/lib/quick-demo-cases';
+import { buildQuickDemoFixture, getQuickDemoCase } from '@/lib/quick-demo-cases';
 import { BriefTopbar } from './brief-topbar';
 import { BriefViews } from './brief-views';
 import { BriefContent } from './brief-content';
@@ -25,6 +25,42 @@ interface BriefPageProps {
 const DEFAULT_TITLE = '智能海报生成网站';
 
 const FALLBACK_LATEST_VERSION = 1;
+const QUICK_SAMPLE_PREFIX = 'quick-sample-';
+
+function sourceCaseIdFromStaticSession(sessionId: string): string | null {
+  return sessionId.startsWith(QUICK_SAMPLE_PREFIX)
+    ? sessionId.slice(QUICK_SAMPLE_PREFIX.length)
+    : null;
+}
+
+function buildInitialBriefState(sessionId: string): {
+  briefVersion: BriefVersion;
+  versions: BriefVersion[];
+  title: string;
+  exportContent: string;
+  sourceCaseId: string;
+} | null {
+  const sourceCaseId = sourceCaseIdFromStaticSession(sessionId);
+  if (!sourceCaseId) return null;
+
+  const fixture = buildQuickDemoFixture(sourceCaseId);
+  const version = fixture.brief_versions[0];
+  const execView = fixture.brief_views.exec as BriefView | undefined;
+  if (!version) return null;
+
+  const briefVersion: BriefVersion = {
+    ...version,
+    session_id: sessionId,
+  };
+
+  return {
+    briefVersion,
+    versions: [briefVersion],
+    title: fixture.title,
+    exportContent: formatBriefViewForExport(execView ?? null),
+    sourceCaseId,
+  };
+}
 
 function formatBriefViewForExport(view: BriefView | null): string {
   if (!view) return '';
@@ -49,15 +85,16 @@ export function BriefPage({ sessionId }: BriefPageProps) {
 
 function BriefPageInner({ sessionId }: BriefPageProps) {
   const router = useRouter();
-  const [briefVersion, setBriefVersion] = useState<BriefVersion | null>(null);
-  const [versions, setVersions] = useState<BriefVersion[]>([]);
+  const initialBrief = buildInitialBriefState(sessionId);
+  const [briefVersion, setBriefVersion] = useState<BriefVersion | null>(initialBrief?.briefVersion ?? null);
+  const [versions, setVersions] = useState<BriefVersion[]>(initialBrief?.versions ?? []);
   const [currentVersion, setCurrentVersion] = useState<number>(FALLBACK_LATEST_VERSION);
-  const [briefTitle, setBriefTitle] = useState(DEFAULT_TITLE);
+  const [briefTitle, setBriefTitle] = useState(initialBrief?.title ?? DEFAULT_TITLE);
   const [quickSessionVersion, setQuickSessionVersion] = useState(1);
-  const [isSampleSession, setIsSampleSession] = useState(false);
-  const [sourceCaseId, setSourceCaseId] = useState<string | null>(null);
-  const [exportContent, setExportContent] = useState<string>('');
-  const [loading, setLoading] = useState(true);
+  const [isSampleSession, setIsSampleSession] = useState(initialBrief !== null);
+  const [sourceCaseId, setSourceCaseId] = useState<string | null>(initialBrief?.sourceCaseId ?? null);
+  const [exportContent, setExportContent] = useState<string>(initialBrief?.exportContent ?? '');
+  const [loading, setLoading] = useState(initialBrief === null);
   const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const requestIdRef = useRef<string | undefined>(undefined);

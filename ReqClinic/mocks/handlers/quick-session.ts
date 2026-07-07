@@ -664,6 +664,29 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
   registry.register('getQuickSession', async (request: { id: UUID }) => {
     const session = store.getQuickSession(request.id);
     if (!session) {
+      const sourceCaseId = sourceCaseIdFromStaticSessionId(request.id);
+      const demoCase = getQuickDemoCase(sourceCaseId);
+      if (sourceCaseId && demoCase) {
+        const now = nowIso();
+        const seededSession: QuickSession = {
+          id: request.id,
+          version: 1,
+          status: 'clarifying',
+          source_kind: 'sample',
+          source_case_id: sourceCaseId,
+          original_input: demoCase.originalInput,
+          current_understanding_version: 0,
+          brief_version: 0,
+          created_at: now,
+          updated_at: now,
+          estimated_purge_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+        };
+        store.setQuickSession(seededSession);
+        seedSampleSession(store, seededSession);
+        return seededSession;
+      }
+    }
+    if (!session) {
       throw new ApiClientError(404, 'NOT_FOUND', '快速问诊会话不存在', generateUUID());
     }
     return session;
@@ -736,8 +759,9 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
         }
 
         if (session.status === 'brief_ready' && hasBoundCardContent(request.content)) {
+          const currentFx = buildCurrentSampleFixture(store, session);
           const coverage = completeCoverage();
-          const nextVersion = addResolvedSampleBrief(store, request.session_id, fx);
+          const nextVersion = addResolvedSampleBrief(store, request.session_id, currentFx);
           messages.push({
             id: generateUUID(),
             session_id: request.session_id,
@@ -752,8 +776,8 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
           setUnderstanding(store, request.session_id, {
             session_id: request.session_id,
             version: nextVersion,
-            summary: fx?.understanding?.summary ?? '关键信息已补齐，当前理解可继续用于沟通。',
-            slots: fx?.understanding?.slots ?? {},
+            summary: currentFx?.understanding?.summary ?? '关键信息已补齐，当前理解可继续用于沟通。',
+            slots: currentFx?.understanding?.slots ?? {},
             coverage_slots: coverage,
           });
           setUnknowns(store, request.session_id, []);

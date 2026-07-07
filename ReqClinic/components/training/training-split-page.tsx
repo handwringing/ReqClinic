@@ -62,6 +62,14 @@ interface TrainingProfile {
   questions: string[];
 }
 
+interface SampleFeedbackProfile {
+  scoreBase: number;
+  missing: string[];
+  suggestions: string[];
+  examples: TrainingFeedback['improvement_examples'];
+  dimensionNotes: Partial<Record<'目标' | '对象' | '边界' | '验收', { evidence: string; comment: string }>>;
+}
+
 const SAMPLE_ROLE_ANSWERS: Record<string, string[]> = {
   运营指标: [
     '我们说的转化率主要是从商品详情页到下单的转化，不包含老客复购。',
@@ -173,6 +181,217 @@ const TRAINING_PROFILES: Record<string, TrainingProfile> = {
   },
 };
 
+const SAMPLE_FEEDBACK_PROFILES: Record<string, SampleFeedbackProfile> = {
+  需求访谈: {
+    scoreBase: 0.47,
+    missing: ['异常处理', '现场核验标准'],
+    suggestions: [
+      '继续追问高峰时段、异常来访和安保核验动作。',
+      '把“更安全”拆成可观察的核验结果，例如漏放、误拦和处理时长。',
+    ],
+    examples: [
+      {
+        before: '访客系统要怎么做？',
+        after: '在访客到门岗但预约信息异常时，安保希望先看到哪些信息、能做哪些处理？',
+        reason: '把泛泛功能追问改成现场异常场景追问。',
+      },
+      {
+        before: '要不要提高效率？',
+        after: '高峰时段一名安保每分钟需要核验多少访客，超过多久算不可接受？',
+        reason: '把效率诉求改成可判断的现场标准。',
+      },
+    ],
+    dimensionNotes: {
+      目标: { evidence: '已开始围绕安保访谈目标追问。', comment: '下一步要把安全和效率拆成具体场景。' },
+      对象: { evidence: '安保主管已经明确，但前台、访客和运营角色还可补问。', comment: '访客系统通常涉及多角色协同。' },
+      边界: { evidence: '还没充分确认异常来访、权限和人工兜底。', comment: '边界会直接影响门岗处置责任。' },
+      验收: { evidence: '还缺少通行速度、误拦漏放等验收口径。', comment: '验收要能对应现场管理结果。' },
+    },
+  },
+  范围边界: {
+    scoreBase: 0.5,
+    missing: ['交易闭环', '不做事项'],
+    suggestions: [
+      '继续追问第一版到底只做信息发布，还是包含担保、支付和纠纷处理。',
+      '把“更安全”改成具体机制，例如校内身份、举报、黑名单或线下交易提醒。',
+    ],
+    examples: [
+      {
+        before: '交易要安全吗？',
+        after: '第一版是否只负责发布和联系，支付、物流、担保和纠纷处理哪些明确不做？',
+        reason: '先划清范围，避免把平台责任无限扩大。',
+      },
+      {
+        before: '有哪些功能？',
+        after: '买家看到商品后，下一步是在平台内沟通，还是跳转到微信/线下交易？',
+        reason: '用真实交易路径倒推必要功能。',
+      },
+    ],
+    dimensionNotes: {
+      目标: { evidence: '已开始追问发布信息与交易闭环的优先级。', comment: '目标不同会决定是否需要支付和纠纷处理。' },
+      对象: { evidence: '对象是校内学生，但管理员、卖家和买家责任还可补问。', comment: '角色边界会影响规则设计。' },
+      边界: { evidence: '担保、物流、支付等不做项还需确认。', comment: '这是本案例最关键的追问方向。' },
+      验收: { evidence: '还缺少首版上线后怎么判断安全和活跃的标准。', comment: '验收可从发布量、举报率和成交路径观察。' },
+    },
+  },
+  创意简报: {
+    scoreBase: 0.56,
+    missing: ['审核红线', '渠道规格'],
+    suggestions: [
+      '继续追问投放渠道、尺寸版本、必须出现的卖点和禁用表达。',
+      '把“高级感”改成可执行的视觉约束，例如色调、素材、留白和品牌禁区。',
+    ],
+    examples: [
+      {
+        before: '你想做什么风格？',
+        after: '这组海报主要投放在哪里，必须避开哪些功效、人物或素材表达？',
+        reason: '从泛泛偏好转成渠道和审核边界追问。',
+      },
+      {
+        before: '要突出转化吗？',
+        after: '用户在几秒内必须看到哪个利益点，首单优惠、套装折扣还是成分安全？',
+        reason: '把转化目标改成画面优先级。',
+      },
+    ],
+    dimensionNotes: {
+      目标: { evidence: '已围绕转化目标开始追问。', comment: '创意 Brief 还要把目标翻译成画面优先级。' },
+      对象: { evidence: '目标受众仍需年龄、渠道和购买动机补充。', comment: '受众不清会导致风格判断失真。' },
+      边界: { evidence: '审核红线、禁用词和素材限制还没充分确认。', comment: '美妆海报尤其需要先问合规边界。' },
+      验收: { evidence: '还缺少审核通过、点击率或卖点可读性的判断标准。', comment: '验收应连接投放目标。' },
+    },
+  },
+  学术任务: {
+    scoreBase: 0.54,
+    missing: ['评分标准', '证据范围'],
+    suggestions: [
+      '继续追问课程要求、引用数量、老师偏好的论文结构和允许的数据来源。',
+      '把“大主题”收窄成一个可以在字数内回答的研究问题。',
+    ],
+    examples: [
+      {
+        before: '你想写什么方向？',
+        after: '这门课要求多少字、几篇文献、是否需要实证材料，老师更看重观点还是规范？',
+        reason: '先确认任务规则，避免选题超出课程要求。',
+      },
+      {
+        before: 'AI 对教育有什么影响？',
+        after: '你准备聚焦大学课堂中的写作反馈、教师评价，还是学生作弊治理？',
+        reason: '把大主题收敛成可论证问题。',
+      },
+    ],
+    dimensionNotes: {
+      目标: { evidence: '已开始从论文主题转向研究问题。', comment: '目标应落到课程可评分的研究问题。' },
+      对象: { evidence: '课程老师和作业要求还可补问。', comment: '学术任务的确认对象通常是评分规则。' },
+      边界: { evidence: '教育阶段、材料来源和论文字数边界还需确认。', comment: '边界决定论文是否可写完。' },
+      验收: { evidence: '还缺少评分标准、引用要求和结构标准。', comment: '验收要对应课程 rubric。' },
+    },
+  },
+  服务流程: {
+    scoreBase: 0.52,
+    missing: ['触点失效', '前后台分工'],
+    suggestions: [
+      '继续追问会员在哪个触点流失，以及顾问、教练、店长分别做什么。',
+      '把“提高续费”拆成续费率、到店率、回访完成率等可观察指标。',
+    ],
+    examples: [
+      {
+        before: '为什么会员不续费？',
+        after: '会员从到期前 14 天到到期后 7 天，在哪个提醒或回访触点最容易断掉？',
+        reason: '把原因追问放回服务流程时间线。',
+      },
+      {
+        before: '员工怎么跟进？',
+        after: '顾问、教练和店长在续费前后分别负责哪一步，哪一步现在没有记录？',
+        reason: '明确前后台分工和责任断点。',
+      },
+    ],
+    dimensionNotes: {
+      目标: { evidence: '已开始围绕续费率和流程改善追问。', comment: '还要确认主指标和辅助指标。' },
+      对象: { evidence: '会员是核心对象，顾问、教练和店长还可继续拆分。', comment: '服务流程必须覆盖前台和后台角色。' },
+      边界: { evidence: '到期前后哪些阶段纳入首版还需确认。', comment: '流程边界决定改造成本。' },
+      验收: { evidence: '还缺少续费率、回访率或投诉减少的目标值。', comment: '服务优化需要可追踪指标。' },
+    },
+  },
+  外包采购: {
+    scoreBase: 0.55,
+    missing: ['交付物清单', '变更机制'],
+    suggestions: [
+      '继续追问首版栏目、素材归属、验收标准、里程碑和变更收费方式。',
+      '把“做官网”拆成页面、内容、后台、表单、上线和维护边界。',
+    ],
+    examples: [
+      {
+        before: '官网要哪些功能？',
+        after: '首版必须交付哪些栏目、页面、文案、图片和表单，哪些明确不包含？',
+        reason: '把功能追问改成可签约的交付范围。',
+      },
+      {
+        before: '多久能做完？',
+        after: '希望按哪些里程碑验收，原型、视觉、开发、上线分别由谁确认？',
+        reason: '补上外包协作中的确认机制。',
+      },
+    ],
+    dimensionNotes: {
+      目标: { evidence: '已开始确认品牌展示或获客目标。', comment: '目标会影响栏目和转化表单设计。' },
+      对象: { evidence: '甲方、外包方和最终访客角色还可补问。', comment: '外包采购要明确确认人。' },
+      边界: { evidence: '后台、多语言、维护、素材等边界还需追问。', comment: '边界不清会导致返工和加价。' },
+      验收: { evidence: '还缺少上线、移动端、表单和交付文件的验收口径。', comment: '验收要能写进合同或需求书。' },
+    },
+  },
+  协作项目: {
+    scoreBase: 0.51,
+    missing: ['分工依赖', '答辩标准'],
+    suggestions: [
+      '继续追问三个人的分工、共同目标、数据边界和答辩版本节点。',
+      '把“做完整”改成可演示流程、创新点说明和材料交付清单。',
+    ],
+    examples: [
+      {
+        before: '你们想做哪些功能？',
+        after: '答辩时必须演示哪一条完整流程，三个人分别负责哪一段？',
+        reason: '把功能列表转成协作和答辩约束。',
+      },
+      {
+        before: '模型怎么做？',
+        after: '训练数据、模型接口和学校答辩设备有哪些风险，谁负责兜底？',
+        reason: '提前暴露关键依赖和风险责任。',
+      },
+    ],
+    dimensionNotes: {
+      目标: { evidence: '已开始追问答辩成功标准。', comment: '毕业设计目标要兼顾演示、创新和文档。' },
+      对象: { evidence: '小组成员明确，但老师和答辩评委标准还可补问。', comment: '评审对象决定取舍优先级。' },
+      边界: { evidence: '数据、模型接口和个性化功能边界还需确认。', comment: '协作项目最容易在边界上失控。' },
+      验收: { evidence: '还缺少可运行演示和答辩材料的完成口径。', comment: '验收要对应学校评分。' },
+    },
+  },
+  早期想法: {
+    scoreBase: 0.5,
+    missing: ['用户假设', '验证方式'],
+    suggestions: [
+      '继续追问具体使用时刻、第一批用户和想验证的关键假设。',
+      '不要过早问功能清单，先问用户为什么需要持续练习。',
+    ],
+    examples: [
+      {
+        before: '要做什么功能？',
+        after: '用户最需要练习的是面试、汇报、破冰聊天，还是日常消息回复？',
+        reason: '早期想法先找具体使用时刻。',
+      },
+      {
+        before: '用户会喜欢吗？',
+        after: '第一版要验证用户愿不愿意连续练习，还是验证反馈是否真的能改善表达？',
+        reason: '把主观判断改成可验证假设。',
+      },
+    ],
+    dimensionNotes: {
+      目标: { evidence: '已开始追问产品想验证的问题。', comment: '早期想法的目标不应过早写成完整功能。' },
+      对象: { evidence: '潜在用户还需要按使用时刻和痛点继续细分。', comment: '用户假设越具体，验证越有效。' },
+      边界: { evidence: '陪练、教练、脚本生成等方向边界还需确认。', comment: '方向边界决定原型形态。' },
+      验收: { evidence: '还缺少愿意持续练习、反馈有效性的验证标准。', comment: '验收应落到试用反馈。' },
+    },
+  },
+};
+
 function getTrainingProfile(trainingCase: TrainingCase): TrainingProfile {
   return TRAINING_PROFILES[trainingCase.category] ?? {
     focus: '目标、角色、场景、边界和验收',
@@ -204,63 +423,57 @@ function buildAutoSummary(trainingCase: TrainingCase, messages: TrainingMessage[
 }
 
 function buildSampleFeedback(trainingCase: TrainingCase, questionCount: number): TrainingFeedback {
-  const covered = Math.min(0.88, 0.42 + questionCount * 0.14);
-  const isCreative = trainingCase.category === '创意简报';
+  const profile = SAMPLE_FEEDBACK_PROFILES[trainingCase.category] ?? SAMPLE_FEEDBACK_PROFILES.需求访谈;
+  const covered = Math.min(0.9, profile.scoreBase + questionCount * 0.12);
+  const objectStatus = questionCount >= 2 ? 'covered' : 'partial';
+  const boundaryStatus = questionCount >= 4 ? 'covered' : 'missing';
+  const acceptanceStatus = questionCount >= 3 ? 'partial' : 'missing';
   return {
     coverage_score: covered,
     missing_dimensions:
       questionCount >= 4
         ? ['后续变化处理']
-        : ['边界限制', '验收口径'],
-    improvement_suggestions: isCreative
-      ? [
-          '继续追问渠道尺寸、禁用表达和最终审核人。',
-          '把“好看”改成可检查的完成标准，例如核心卖点几秒内能读懂。',
-        ]
-      : [
-          '继续追问限制条件和最终确认人。',
-          '把模糊目标改成可观察的完成标准。',
-        ],
+        : profile.missing,
+    improvement_suggestions: profile.suggestions,
     dimension_breakdown: [
       {
         dimension: '目标',
         status: questionCount >= 1 ? 'covered' : 'partial',
-        evidence: questionCount >= 1 ? '已开始追问目标或用途。' : '还需要先确认目标。',
-        comment: '先确认为什么要做，后续范围才不会发散。',
+        evidence:
+          questionCount >= 1
+            ? profile.dimensionNotes.目标?.evidence ?? '已开始追问目标或用途。'
+            : '还需要先确认目标。',
+        comment: profile.dimensionNotes.目标?.comment ?? '先确认为什么要做，后续范围才不会发散。',
       },
       {
         dimension: '对象',
-        status: questionCount >= 2 ? 'covered' : 'partial',
-        evidence: questionCount >= 2 ? '已追问目标用户或确认人。' : '对象和确认人还不够清楚。',
-        comment: '对象不同，方案和验收标准会明显不同。',
+        status: objectStatus,
+        evidence:
+          objectStatus === 'covered'
+            ? '已继续追问目标用户、确认人或协作角色。'
+            : profile.dimensionNotes.对象?.evidence ?? '对象和确认人还不够清楚。',
+        comment: profile.dimensionNotes.对象?.comment ?? '对象不同，方案和验收标准会明显不同。',
       },
       {
         dimension: '边界',
-        status: questionCount >= 4 ? 'covered' : 'missing',
-        evidence: questionCount >= 4 ? '已追问限制、禁用项或范围。' : '还没有充分追问限制条件。',
-        comment: '边界决定哪些承诺不能轻易写进需求。',
+        status: boundaryStatus,
+        evidence:
+          boundaryStatus === 'covered'
+            ? '已追问限制、禁用项或范围。'
+            : profile.dimensionNotes.边界?.evidence ?? '还没有充分追问限制条件。',
+        comment: profile.dimensionNotes.边界?.comment ?? '边界决定哪些承诺不能轻易写进需求。',
       },
       {
         dimension: '验收',
-        status: questionCount >= 3 ? 'partial' : 'missing',
-        evidence: questionCount >= 3 ? '已有完成口径线索，但还可更量化。' : '还缺少可判断完成的标准。',
-        comment: '验收标准越具体，后续沟通成本越低。',
+        status: acceptanceStatus,
+        evidence:
+          acceptanceStatus === 'partial'
+            ? '已有完成口径线索，但还可更量化。'
+            : profile.dimensionNotes.验收?.evidence ?? '还缺少可判断完成的标准。',
+        comment: profile.dimensionNotes.验收?.comment ?? '验收标准越具体，后续沟通成本越低。',
       },
     ],
-    improvement_examples: [
-      {
-        before: '你想做什么风格？',
-        after: isCreative
-          ? '这组海报主要投放在哪里，必须避开哪些功效或素材表达？'
-          : '第一版必须覆盖哪个场景，哪些内容明确不做？',
-        reason: '从泛泛偏好转成场景和边界追问。',
-      },
-      {
-        before: '这样可以吗？',
-        after: '什么结果出现时，你会认为这次需求已经完成？',
-        reason: '把确认式问题改成可验收标准追问。',
-      },
-    ],
+    improvement_examples: profile.examples,
   };
 }
 
