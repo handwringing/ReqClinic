@@ -732,6 +732,8 @@ export function TrainingSplitPage({
   const [briefOpen, setBriefOpen] = useState(true);
   const [submittingQuestion, setSubmittingQuestion] = useState(false);
   const [submittingSummary, setSubmittingSummary] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [summaryReady, setSummaryReady] = useState(attempt.question_count > 0);
 
   // 新增：等待回答 / 失败提示 / job 轮询相关状态
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
@@ -747,6 +749,7 @@ export function TrainingSplitPage({
 
   useEffect(() => {
     mountedRef.current = true;
+    setHydrated(true);
     return () => {
       mountedRef.current = false;
     };
@@ -765,14 +768,25 @@ export function TrainingSplitPage({
   // 优先使用后端返回的 coach_projection.next_hint；否则回退到本地建议追问。
   const suggestedQuestion =
     nextHint ?? trainingProfile.questions[questionCount % trainingProfile.questions.length];
-  const isLocked = submittingSummary;
+  const isLocked = submittingSummary || !hydrated;
   const isWaiting = isWaitingAnswer || submittingQuestion;
   const canSendQuestion = input.trim().length > 0 && !isWaiting && !isLocked;
   const autoSummary = useMemo(
     () => buildAutoSummary(trainingCase, messages),
     [trainingCase, messages],
   );
-  const canSubmitSummary = questionCount > 0 && !isWaiting && !submittingSummary;
+  const canSubmitSummary = summaryReady && !isWaiting && !submittingSummary;
+
+  useEffect(() => {
+    if (questionCount <= 0 || isWaiting || submittingSummary) {
+      setSummaryReady(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSummaryReady(true);
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [questionCount, isWaiting, submittingSummary]);
 
   const addBinding = (binding: TrainingBinding) => {
     setBindings((prev) => [...prev.filter((item) => item.id !== binding.id), binding]);
