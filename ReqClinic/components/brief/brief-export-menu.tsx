@@ -9,6 +9,7 @@ import {
   FileText,
   Loader2,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { getApiClient } from '@/lib/api';
 import type { BriefView } from '@/lib/api/types';
 import { buildQuickDemoFixture, getQuickDemoCase } from '@/lib/quick-demo-cases';
@@ -251,7 +252,7 @@ export function BriefExportMenu({
           })}
         </div>
       )}
-      {manualCopyContent && (
+      {manualCopyContent && typeof document !== 'undefined' && createPortal(
         <div
           role="dialog"
           aria-modal="true"
@@ -311,7 +312,8 @@ export function BriefExportMenu({
               }}
             />
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
