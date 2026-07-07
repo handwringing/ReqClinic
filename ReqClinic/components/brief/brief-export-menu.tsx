@@ -10,6 +10,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { getApiClient } from '@/lib/api';
+import type { BriefView } from '@/lib/api/types';
 import { useToast } from '@/components/ui';
 
 interface BriefExportMenuProps {
@@ -59,7 +60,7 @@ export function BriefExportMenu({
       brief_version: briefVersion,
       view_type: 'exec',
     });
-    return view.content.trim();
+    return formatBriefViewForExport(view).trim();
   };
 
   const handleCopy = async () => {
@@ -216,4 +217,17 @@ function safeFileName(value: string): string {
     .replace(/\s+/g, '')
     .trim();
   return cleaned || '需求简报';
+}
+
+function formatBriefViewForExport(view: BriefView | null): string {
+  if (!view) return '';
+  const sections = view.sections ?? [];
+  const sectionText = sections
+    .map((section) => `## ${section.title}\n\n${section.content}`)
+    .join('\n\n');
+  const content = view.content?.trim() ?? '';
+  if (view.view_type === 'exec' && sectionText.trim()) {
+    return [content, sectionText].filter(Boolean).join('\n\n');
+  }
+  return content || sectionText;
 }

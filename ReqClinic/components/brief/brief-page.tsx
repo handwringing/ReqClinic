@@ -28,11 +28,15 @@ const FALLBACK_LATEST_VERSION = 1;
 
 function formatBriefViewForExport(view: BriefView | null): string {
   if (!view) return '';
-  if (view.content?.trim()) return view.content;
   const sections = view.sections ?? [];
-  return sections
+  const sectionText = sections
     .map((section) => `## ${section.title}\n\n${section.content}`)
     .join('\n\n');
+  const content = view.content?.trim() ?? '';
+  if (view.view_type === 'exec' && sectionText.trim()) {
+    return [content, sectionText].filter(Boolean).join('\n\n');
+  }
+  return content || sectionText;
 }
 
 export function BriefPage({ sessionId }: BriefPageProps) {
