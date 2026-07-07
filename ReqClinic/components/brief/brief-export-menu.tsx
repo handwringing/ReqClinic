@@ -256,8 +256,11 @@ export function BriefExportMenu({
           role="dialog"
           aria-modal="true"
           aria-label="复制专业报告"
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          style={{ background: 'rgba(39,32,24,0.28)' }}
+          className="fixed inset-0 z-50 flex items-start justify-center px-4 py-6"
+          style={{
+            background: 'rgba(39,32,24,0.28)',
+            overflowY: 'auto',
+          }}
         >
           <div
             className="flex w-full max-w-3xl flex-col gap-3"
@@ -266,6 +269,7 @@ export function BriefExportMenu({
               border: '1px solid var(--aurora-card-border)',
               background: 'var(--aurora-card-bg)',
               boxShadow: 'var(--aurora-shadow-medium)',
+              maxHeight: 'calc(100vh - 48px)',
               padding: 16,
             }}
           >
@@ -298,7 +302,8 @@ export function BriefExportMenu({
               value={manualCopyContent}
               className="w-full resize-none rounded text-xs leading-relaxed"
               style={{
-                minHeight: 360,
+                minHeight: 260,
+                maxHeight: '52vh',
                 border: '1px solid var(--aurora-hair)',
                 background: 'rgba(255,255,255,0.72)',
                 color: 'var(--aurora-ink)',
