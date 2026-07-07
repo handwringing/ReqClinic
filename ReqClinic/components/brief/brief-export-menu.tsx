@@ -53,25 +53,39 @@ export function BriefExportMenu({
     };
   }, [open]);
 
-  const resolveProfessionalReport = async (): Promise<string> => {
+  const resolveImmediateProfessionalReport = (): string => {
     const current = briefContent.trim();
     if (current && !isGenericExportFallback(current)) return current;
     const staticSampleReport = resolveStaticSampleReport(sessionId, briefVersion);
     if (staticSampleReport) return staticSampleReport;
+    return '';
+  };
+
+  const fetchProfessionalReport = async (): Promise<string> => {
     const view = await getApiClient().getBriefView({
       session_id: sessionId,
       brief_version: briefVersion,
       view_type: 'exec',
     });
-    const formatted = formatBriefViewForExport(view).trim();
-    return formatted || current;
+    return formatBriefViewForExport(view).trim();
+  };
+
+  const resolveProfessionalReport = async (): Promise<string> => {
+    const current = briefContent.trim();
+    const immediate = resolveImmediateProfessionalReport();
+    if (immediate) return immediate;
+    const fetched = await fetchProfessionalReport();
+    return fetched || current;
   };
 
   const handleCopy = async () => {
     if (busy) return;
     setBusy('copy');
     try {
-      const content = await resolveProfessionalReport();
+      let content = resolveImmediateProfessionalReport();
+      if (!content) {
+        content = await resolveProfessionalReport();
+      }
       if (!content) throw new Error('empty');
       let copied = false;
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -86,9 +100,14 @@ export function BriefExportMenu({
         const ta = document.createElement('textarea');
         ta.value = content;
         ta.style.position = 'fixed';
+        ta.style.left = '0';
+        ta.style.top = '0';
         ta.style.opacity = '0';
+        ta.setAttribute('readonly', 'true');
         document.body.appendChild(ta);
+        ta.focus();
         ta.select();
+        ta.setSelectionRange(0, ta.value.length);
         copied = document.execCommand('copy');
         document.body.removeChild(ta);
       }
