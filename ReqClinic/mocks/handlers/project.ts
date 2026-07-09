@@ -1,6 +1,15 @@
 import type { MockRouteRegistry } from '../registry';
 import type { MockSessionStore } from '../session-store';
-import type { UUID, Project, ProjectMember, DeleteTask, AiJob } from '@/lib/api/types';
+import type {
+  UUID,
+  Project,
+  ProjectMember,
+  DeleteTask,
+  AiJob,
+  FormalMapData,
+  FormalMapMessage,
+  FormalMapResponse,
+} from '@/lib/api/types';
 import { generateUUID } from '@/lib/utils/id';
 import { ApiClientError } from '@/lib/api/errors';
 import { getQuickDemoCase } from '@/lib/quick-demo-cases';
@@ -8,6 +17,7 @@ import { asterFixture } from './_fixtures';
 import {
   FORMAL_CUSTOM_PROJECT_ID,
   FORMAL_STATIC_CASE_IDS,
+  formalQuickUpgradeProjectId,
   formalStaticProjectId,
   staticFormalProjectSourceCase,
 } from '@/lib/static-demo-ids';
@@ -44,6 +54,14 @@ function getMembers(store: MockSessionStore): Record<string, ProjectMember[]> {
 
 function setMembers(store: MockSessionStore, members: Record<string, ProjectMember[]>): void {
   store.set('members', members);
+}
+
+function getFormalMapMessages(store: MockSessionStore, projectId: string): FormalMapMessage[] {
+  return store.get<FormalMapMessage[]>(`formal_map_messages:${projectId}`) ?? [];
+}
+
+function setFormalMapMessages(store: MockSessionStore, projectId: string, messages: FormalMapMessage[]): void {
+  store.set(`formal_map_messages:${projectId}`, messages);
 }
 
 function asterProject(): Project | null {
@@ -95,6 +113,161 @@ function staticProject(projectId: string): Project | null {
   return null;
 }
 
+function resolveProject(store: MockSessionStore, projectId: string): Project | null {
+  const projects = getProjects(store);
+  const found = projects[projectId];
+  if (found) return found;
+  if (projectId === ASTER_PROJECT_ID) return asterProject();
+  return staticProject(projectId);
+}
+
+function buildMockFormalMap(project: Project): FormalMapData {
+  const title = project.title || '正式项目示例';
+  const sourceContext =
+    project.source_kind === 'quick_upgrade'
+      ? '来自快速问诊升级，已保留示例回答作为初始上下文'
+      : project.source_kind === 'sample'
+        ? '来自参考案例，使用 mock 数据演示正式项目问诊'
+        : '来自自定义项目，使用 mock 数据演示正式项目问诊';
+  const modules: FormalMapData['modules'] = [
+    {
+      id: 'goal',
+      title: '目标与成功标准',
+      status: '正在梳理',
+      summary: '先把项目要解决的问题、验收口径和决策人说清楚。',
+      known: [`项目名称：${title}`],
+      assumptions: ['目前仍需要确认最关键的业务目标和验收优先级。'],
+      questions: ['这个项目最终由谁确认目标和成功标准？'],
+      relatedModuleIds: ['scope', 'roles'],
+    },
+    {
+      id: 'scope',
+      title: '首版范围与边界',
+      status: '有方案可选',
+      summary: '把首版必须交付、可以后置和明确不做的内容拆开。',
+      known: ['已进入正式项目整理阶段。'],
+      assumptions: ['首版应优先覆盖能验证核心价值的闭环。'],
+      questions: ['哪些能力必须首版上线，哪些可以放到下一版？'],
+      options: [
+        {
+          id: 'scope_core',
+          title: '核心闭环优先',
+          fit: '适合先验证关键流程和交付可行性。',
+          tradeoff: '部分扩展体验需要后续补齐。',
+          recommended: true,
+        },
+        {
+          id: 'scope_complete',
+          title: '一次性铺满',
+          fit: '适合预算和周期都比较充足的项目。',
+          tradeoff: '首版范围和验收压力会明显增加。',
+        },
+      ],
+      relatedModuleIds: ['goal', 'risk'],
+    },
+    {
+      id: 'roles',
+      title: '角色与责任',
+      status: '建议确认',
+      summary: '明确谁使用、谁审核、谁维护，以及异常情况由谁处理。',
+      known: ['正式项目需要沉淀可追踪的责任边界。'],
+      assumptions: ['使用者、审核者和管理员可能不是同一类人。'],
+      questions: ['普通使用者、管理员和项目负责人分别负责什么？'],
+      relatedModuleIds: ['goal', 'risk'],
+    },
+    {
+      id: 'risk',
+      title: '风险与兜底',
+      status: '待补充',
+      summary: '提前暴露周期、数据、权限、验收争议等不确定项。',
+      known: ['未确认项不应直接写成最终承诺。'],
+      assumptions: ['需要为接口、数据或人员变动准备兜底方案。'],
+      questions: ['如果关键依赖延期，首版保底交付是什么？'],
+      relatedModuleIds: ['scope', 'report'],
+    },
+    {
+      id: 'report',
+      title: '报告与版本',
+      status: '已整理',
+      summary: '把当前结论、待确认项和下一步动作投射到需求报告。',
+      known: ['报告需要区分已明确、假设和待确认。'],
+      assumptions: ['每次确认后都应更新地图和报告草稿。'],
+      questions: ['报告面向谁审阅，是否需要单独的技术版本？'],
+      relatedModuleIds: ['goal', 'risk'],
+    },
+  ];
+  return {
+    result_type: 'formal_map_snapshot',
+    title: `${title}需求地图`,
+    summary: `${title}已进入正式项目问诊。当前最需要先确认目标责任人与验收成功标准。`,
+    projectType: 'formal_project',
+    sourceContext,
+    currentModuleId: 'goal',
+    nextQuestion: modules[0]?.questions[0] ?? '请先补充最关键的验收标准。',
+    generationSteps: [
+      { label: '读取项目上下文', state: 'done' },
+      { label: '生成需求地图', state: 'done' },
+      { label: '提出第一轮追问', state: 'active' },
+    ],
+    modules,
+    unresolvedItems: modules.flatMap((module) =>
+      module.questions.map((question) => ({
+        id: `${module.id}_q`,
+        label: module.title,
+        detail: question,
+        impact: module.id === 'goal' ? '影响验收标准和后续范围判断' : '影响正式报告的完整度',
+      }))
+    ),
+    reportProjection: {
+      overview: `${title}已经形成初版需求地图，下一步应围绕目标、范围、角色和风险逐项确认。`,
+      detailedReport: [
+        `# ${title}需求报告草稿`,
+        '',
+        '## 当前结论',
+        '- 已完成正式项目地图初始化。',
+        '- 当前优先追问目标确认人与成功标准。',
+        '',
+        '## 待确认问题',
+        ...modules.map((module) => `- ${module.title}：${module.questions[0] ?? '暂无'}`),
+      ].join('\n'),
+    },
+    qualityNotes: ['mock 正式问诊会保留 AI 提问、用户回答和报告投射，便于验证完整流程。'],
+  };
+}
+
+function buildFormalMapResponse(store: MockSessionStore, project: Project): FormalMapResponse {
+  const map = buildMockFormalMap(project);
+  let messages = getFormalMapMessages(store, project.id);
+  if (messages.length === 0) {
+    messages = [
+      {
+        id: generateUUID(),
+        project_id: project.id,
+        role: 'assistant',
+        content: `问诊助手先问：${map.nextQuestion}`,
+        message_type: 'question',
+        bound_refs: [{ id: map.currentModuleId, title: '目标与成功标准', kind: 'map_node' }],
+        created_at: new Date().toISOString(),
+      },
+    ];
+    setFormalMapMessages(store, project.id, messages);
+  }
+  return {
+    project_id: project.id,
+    active_job_id: null,
+    snapshot: {
+      id: generateUUID(),
+      project_id: project.id,
+      version: Math.max(1, project.version),
+      status: 'ready',
+      source_kind: project.source_kind === 'quick_upgrade' ? 'quick_upgrade' : 'fallback',
+      created_at: project.updated_at,
+      data: map,
+    },
+    messages,
+  };
+}
+
 export function registerProjectHandlers(registry: MockRouteRegistry, store: MockSessionStore): void {
   registry.register('createProject', async (request: {
     title: string;
@@ -107,6 +280,8 @@ export function registerProjectHandlers(registry: MockRouteRegistry, store: Mock
     const projectId =
       request.source_kind === 'sample' && request.source_case_id
         ? formalStaticProjectId(request.source_case_id)
+        : request.source_kind === 'quick_upgrade' && request.source_case_id
+          ? formalQuickUpgradeProjectId(request.source_case_id)
         : FORMAL_CUSTOM_PROJECT_ID;
     const project: Project = {
       id: projectId,
@@ -129,18 +304,59 @@ export function registerProjectHandlers(registry: MockRouteRegistry, store: Mock
   });
 
   registry.register('getProject', async (request: { id: UUID }) => {
-    const projects = getProjects(store);
-    const found = projects[request.id];
-    if (found) return found;
-    // Aster fixture 项目。
-    if (request.id === ASTER_PROJECT_ID) {
-      const ap = asterProject();
-      if (ap) return ap;
-    }
-    const staticFallback = staticProject(request.id);
-    if (staticFallback) return staticFallback;
+    const project = resolveProject(store, request.id);
+    if (project) return project;
     throw new ApiClientError(404, 'NOT_FOUND', '项目不存在', generateUUID());
   });
+
+  registry.register('getFormalMapSnapshot', async (request: { project_id: UUID }) => {
+    const project = resolveProject(store, request.project_id);
+    if (!project) {
+      throw new ApiClientError(404, 'NOT_FOUND', '项目不存在', generateUUID());
+    }
+    return buildFormalMapResponse(store, project);
+  });
+
+  registry.register(
+    'postFormalProjectMessage',
+    async (request: {
+      project_id: UUID;
+      content: string;
+      bound_refs?: FormalMapMessage['bound_refs'];
+    }) => {
+      const project = resolveProject(store, request.project_id);
+      if (!project) {
+        throw new ApiClientError(404, 'NOT_FOUND', '项目不存在', generateUUID());
+      }
+      const map = buildMockFormalMap(project);
+      const now = new Date().toISOString();
+      const currentMessages = getFormalMapMessages(store, project.id);
+      const nextMessages: FormalMapMessage[] = [
+        ...currentMessages,
+        {
+          id: generateUUID(),
+          project_id: project.id,
+          role: 'user',
+          content: request.content,
+          message_type: 'answer',
+          bound_refs: request.bound_refs ?? [],
+          created_at: now,
+        },
+        {
+          id: generateUUID(),
+          project_id: project.id,
+          role: 'assistant',
+          content: `已记录。下一步先确认：${map.nextQuestion}`,
+          message_type: 'question',
+          bound_refs: [{ id: map.currentModuleId, title: '目标与成功标准', kind: 'map_node' }],
+          created_at: now,
+        },
+      ];
+      setFormalMapMessages(store, project.id, nextMessages);
+      return { job_id: generateUUID(), status: 'accepted' as const };
+    },
+    [202]
+  );
 
   registry.register(
     'updateProject',

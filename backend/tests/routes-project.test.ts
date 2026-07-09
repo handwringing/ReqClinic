@@ -214,6 +214,20 @@ describe('project routes (Task 16-17)', () => {
       );
     });
 
+    it('rejects custom projects when the initial request is not meaningful', async () => {
+      const res = await inject('POST', '/api/v1/projects', {
+        body: {
+          initial_request: '123123',
+          source_kind: 'custom',
+        },
+        ...asOwner(),
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.details.initial_request).toContain('不够像一个项目需求');
+    });
+
     it('creates sample projects with a deterministic map and no queued AI job', async () => {
       const res = await inject('POST', '/api/v1/projects', {
         body: {

@@ -7,11 +7,9 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
-  FileText,
   GraduationCap,
   Send,
   Sparkles,
-  X,
 } from 'lucide-react';
 import { getApiClient } from '@/lib/api';
 import type {
@@ -514,13 +512,14 @@ function createInitialAssistantMessage(
   return {
     id: `ai-init-${generateUUID()}`,
     role: 'assistant',
+    speaker: 'coach',
     content: trainingCase.description,
     structured_content: {
       paragraphs: [
         trainingCase.description,
-        `先围绕${trainingProfile.focus}追问。下方会给出当前建议追问，你也可以引用案例背景后再发送。`,
+        `先围绕${trainingProfile.focus}追问。下方会给出当前建议追问，可以直接填入并发送。`,
       ],
-      highlights: ['当前建议追问', '案例背景'],
+      highlights: ['当前建议追问'],
     },
     created_at: new Date().toISOString(),
   };
@@ -707,14 +706,6 @@ export function TrainingSplitPage({
   onSummarySubmitted,
 }: TrainingSplitPageProps) {
   const router = useRouter();
-  const caseBinding = useMemo<TrainingBinding>(
-    () => ({
-      id: 'training-case-brief',
-      title: '案例背景',
-      detail: trainingCase.title,
-    }),
-    [trainingCase.title],
-  );
   const trainingProfile = useMemo(
     () => getTrainingProfile(trainingCase),
     [trainingCase],
@@ -787,14 +778,6 @@ export function TrainingSplitPage({
     }, 220);
     return () => window.clearTimeout(timer);
   }, [questionCount, isWaiting, submittingSummary]);
-
-  const addBinding = (binding: TrainingBinding) => {
-    setBindings((prev) => [...prev.filter((item) => item.id !== binding.id), binding]);
-  };
-
-  const removeBinding = (id: string) => {
-    setBindings((prev) => prev.filter((item) => item.id !== id));
-  };
 
   const fillSuggestedQuestion = () => {
     if (isWaiting || isLocked) return;
@@ -1110,40 +1093,12 @@ export function TrainingSplitPage({
               >
                 填入追问
               </button>
-              <button
-                type="button"
-                className="app-chip"
-                onClick={() => addBinding(caseBinding)}
-                disabled={isLocked || isWaiting}
-                title={caseBinding.detail}
-              >
-                <FileText className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
-                引用案例背景
-              </button>
               <span className="text-[11px]" style={{ color: 'var(--aurora-muted)' }}>
                 当前建议：{suggestedQuestion}
               </span>
             </div>
 
             <div className="inline-composer-field" style={{ minHeight: 82 }}>
-              {bindings.map((binding) => (
-                <span
-                  key={binding.id}
-                  className="inline-reference-token"
-                  title={`${binding.title} · ${binding.detail}`}
-                >
-                  <FileText className="h-3 w-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
-                  <span className="inline-reference-token__label">{binding.title}</span>
-                  <button
-                    type="button"
-                    className="inline-reference-token__remove"
-                    aria-label={`移除 ${binding.title}`}
-                    onClick={() => removeBinding(binding.id)}
-                  >
-                    <X className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
-                  </button>
-                </span>
-              ))}
               <textarea
                 value={input}
                 onChange={(event) => {
@@ -1302,14 +1257,6 @@ export function TrainingSplitPage({
                           ? '参考案例'
                           : `第 ${trainingCase.version} 版`}
                       </span>
-                      <button
-                        type="button"
-                        className="app-chip"
-                        onClick={() => addBinding(caseBinding)}
-                        disabled={isLocked || isWaiting}
-                      >
-                        引用到输入框
-                      </button>
                     </div>
                   </div>
                 )}

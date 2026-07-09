@@ -28,6 +28,12 @@ export interface FormalAiPanelProps {
   externalBinding?: FormalBinding & { nonce: number };
   messages: FormalMapMessage[];
   activeJobId?: string | null;
+  isGuidedDemo?: boolean;
+  panelWidth?: number;
+  requiredBindingId?: string;
+  demoNotice?: string | null;
+  demoFlowComplete?: boolean;
+  onDemoStepComplete?: () => void;
   onSubmitted: (jobId?: string | null) => void;
 }
 
@@ -41,26 +47,59 @@ export function FormalAiPanel({
   externalBinding,
   messages,
   activeJobId,
+  isGuidedDemo = false,
+  panelWidth = 390,
+  requiredBindingId,
+  demoNotice,
+  demoFlowComplete = false,
+  onDemoStepComplete,
   onSubmitted,
 }: FormalAiPanelProps) {
   const [draft, setDraft] = useState('');
   const [bindings, setBindings] = useState<FormalBinding[]>([]);
+  const [localMessages, setLocalMessages] = useState<FormalMapMessage[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const hasUserMessage = messages.some((message) => message.role === 'user');
+  const visibleMessages = [...messages, ...localMessages];
+  const hasUserMessage = visibleMessages.some((message) => message.role === 'user');
+  const hasRequiredBinding =
+    !isGuidedDemo ||
+    demoFlowComplete ||
+    !requiredBindingId ||
+    bindings.some((binding) => binding.id === requiredBindingId);
 
   useEffect(() => {
     if (!externalBinding) return;
-    setBindings((prev) => [
-      ...prev.filter((item) => item.id !== externalBinding.id),
-      {
+    setErrorText('');
+    const nextBinding = {
         id: externalBinding.id,
         title: externalBinding.title,
         detail: externalBinding.detail,
-      },
-    ]);
-  }, [externalBinding]);
+    };
+    setBindings((prev) => (
+      isGuidedDemo
+        ? [nextBinding]
+        : [
+            ...prev.filter((item) => item.id !== externalBinding.id),
+            nextBinding,
+          ]
+    ));
+  }, [externalBinding, isGuidedDemo]);
+
+  useEffect(() => {
+    setLocalMessages([]);
+    setDraft('');
+    setBindings([]);
+    setErrorText('');
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!isGuidedDemo) return;
+    setDraft('');
+    setBindings([]);
+    setErrorText('');
+  }, [isGuidedDemo, activeModule?.id]);
 
   useEffect(() => {
     if (!collapsed && scrollRef.current) {
@@ -135,15 +174,57 @@ export function FormalAiPanel({
 
   function removeBinding(id: string) {
     setBindings((prev) => prev.filter((item) => item.id !== id));
+    if (isGuidedDemo && id === requiredBindingId) {
+      setDraft('');
+      setErrorText('先重新加入当前节点，再填入回答。');
+    }
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     const text = draft.trim();
     if (!text || submitting || activeJobId) return;
+    if (isGuidedDemo && demoFlowComplete) return;
+    if (isGuidedDemo && !hasRequiredBinding) {
+      setErrorText(`先点「${activeModule?.title ?? '当前节点'}」节点上的“加入”。`);
+      return;
+    }
     setSubmitting(true);
     setErrorText('');
     try {
+      if (isGuidedDemo) {
+        const now = new Date().toISOString();
+        const moduleTitle = activeModule?.title ?? '当前节点';
+        const userMessage: FormalMapMessage = {
+          id: `local-user-${Date.now()}`,
+          project_id: projectId,
+          role: 'user',
+          content: text,
+          message_type: 'answer',
+          bound_refs: bindings.map((binding) => ({
+            id: binding.id,
+            title: binding.title,
+            detail: binding.detail,
+            kind: 'map_node',
+          })),
+          created_at: now,
+        };
+        const assistantMessage: FormalMapMessage = {
+          id: `local-assistant-${Date.now()}`,
+          project_id: projectId,
+          role: 'assistant',
+          content: `回答已纳入「${moduleTitle}」节点。请继续按照下方提示确认下一项，完成后可以查看报告。`,
+          message_type: 'status',
+          bound_refs: [],
+          created_at: now,
+        };
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        setLocalMessages((prev) => [...prev, userMessage, assistantMessage]);
+        setDraft('');
+        setBindings([]);
+        onDemoStepComplete?.();
+        return;
+      }
       const result = await getApiClient().postFormalProjectMessage({
         project_id: projectId,
         content: text,
@@ -164,11 +245,22 @@ export function FormalAiPanel({
     }
   }
 
+  function fillDemoAnswer() {
+    if (submitting || activeJobId) return;
+    if (demoFlowComplete) return;
+    if (!hasRequiredBinding) {
+      setErrorText(`先点「${activeModule?.title ?? '当前节点'}」节点上的“加入”。`);
+      return;
+    }
+    setErrorText('');
+    setDraft(buildDemoFormalAnswer(activeModule, projectTitle));
+  }
+
   return (
     <aside
       className="formal-ai-panel"
       style={{
-        width: 'clamp(320px, 27vw, 390px)',
+        width: panelWidth,
         height: '100%',
         minHeight: 0,
         background: 'rgba(245, 241, 232, 0.55)',
@@ -237,20 +329,22 @@ export function FormalAiPanel({
             hasUserMessage={hasUserMessage}
           />
         )}
-        {messages.length === 0 && (
+        {visibleMessages.length === 0 && (
           <FormalMessageBubble
             message={{
               id: 'local-initial-question',
               project_id: projectId,
               role: 'assistant',
-              content: activeModule?.questions[0] ?? '我会根据需求地图继续追问。先确认最影响范围和交付的一个问题。',
+              content: activeModule?.questions[0]
+                ? `问诊助手先问：${activeModule.questions[0]}`
+                : '问诊助手会根据需求地图继续追问。先确认最影响范围和交付的一个问题。',
               message_type: 'question',
               bound_refs: [],
               created_at: new Date().toISOString(),
             }}
           />
         )}
-        {messages.map((message) => (
+        {visibleMessages.map((message) => (
           <FormalMessageBubble key={message.id} message={message} />
         ))}
         {activeJobId && (
@@ -279,41 +373,74 @@ export function FormalAiPanel({
         }}
         onSubmit={(event) => void submit(event)}
       >
-        <div className="inline-composer-field" style={{ minHeight: 88 }}>
-          {bindings.map((binding) => (
-            <span
-              key={binding.id}
-              className="inline-reference-token"
-              title={`${binding.title} · ${binding.detail}`}
-            >
-              <Sparkles className="h-3 w-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
-              <span className="inline-reference-token__label">{binding.title}</span>
-              <button
-                type="button"
-                aria-label={`移除 ${binding.title}`}
-                className="inline-reference-token__remove"
-                onClick={() => removeBinding(binding.id)}
-              >
-                <X className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
-              </button>
+        {isGuidedDemo && (
+          <div
+            className="formal-ai-demo-guide"
+            role="note"
+          >
+            <span>
+              {demoFlowComplete
+                ? '本轮确认已完成，可以查看报告或返回入口。'
+                : <>当前步骤：先点「{activeModule?.title ?? '当前节点'}」上的“加入”，再填入回答并发送。</>}
             </span>
-          ))}
+            <button
+              type="button"
+              className="app-chip app-chip-sage"
+              onClick={fillDemoAnswer}
+              disabled={Boolean(activeJobId) || submitting || !hasRequiredBinding || demoFlowComplete}
+            >
+              填入回答
+            </button>
+          </div>
+        )}
+        {isGuidedDemo && (demoNotice || errorText) && (
+          <div className="formal-ai-demo-notice" role="status" aria-live="polite">
+            {demoNotice ?? errorText}
+          </div>
+        )}
+        <div className="inline-composer-field" style={{ minHeight: 88 }}>
+          {bindings.length > 0 && (
+            <div className="inline-composer-reference-strip" aria-label="已加入对话的节点">
+              {bindings.map((binding) => (
+              <span
+                key={binding.id}
+                className="inline-reference-token"
+                title={`${binding.title} · ${binding.detail}`}
+              >
+                <Sparkles className="h-3 w-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+                <span className="inline-reference-token__label">{binding.title}</span>
+                <button
+                  type="button"
+                  aria-label={`移除 ${binding.title}`}
+                  className="inline-reference-token__remove"
+                  onClick={() => removeBinding(binding.id)}
+                >
+                  <X className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                </button>
+              </span>
+              ))}
+            </div>
+          )}
           <textarea
-            className="app-textarea inline-composer-textarea"
+            className={`app-textarea inline-composer-textarea ${isGuidedDemo ? 'inline-composer-textarea--locked' : ''}`}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={activeJobId ? '正在更新地图，请稍候。' : '回答当前问题；也可以先从需求地图加入节点。'}
+            onChange={(event) => {
+              if (isGuidedDemo) return;
+              setDraft(event.target.value);
+            }}
+            placeholder={activeJobId ? '正在更新地图，请稍候。' : isGuidedDemo ? (demoFlowComplete ? '本轮确认已完成，可以查看报告。' : `先点「${activeModule?.title ?? '当前节点'}」上的“加入”，再点击“填入回答”。`) : '回答当前问题；也可以先从需求地图加入节点。'}
             rows={3}
             disabled={Boolean(activeJobId) || submitting}
+            readOnly={isGuidedDemo}
             style={{ minHeight: 64 }}
           />
         </div>
-        {errorText && <div className="formal-ai-error">{errorText}</div>}
+        {!isGuidedDemo && errorText && <div className="formal-ai-error">{errorText}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="submit"
             className="app-btn-primary"
-            disabled={!draft.trim() || submitting || Boolean(activeJobId)}
+            disabled={!draft.trim() || submitting || Boolean(activeJobId) || (isGuidedDemo && (!hasRequiredBinding || demoFlowComplete))}
             style={{ padding: '8px 14px', fontSize: 13 }}
           >
             <Send size={15} strokeWidth={1.5} aria-hidden="true" />
@@ -323,6 +450,27 @@ export function FormalAiPanel({
       </form>
     </aside>
   );
+}
+
+function buildDemoFormalAnswer(module?: QuickDemoGuidanceModule, projectTitle?: string): string {
+  const question = module?.questions?.[0] ?? '';
+  const title = module?.title ?? '';
+  if (/权限|角色|使用/.test(title + question)) {
+    return '先由项目负责人确认规则，普通使用者只提交或查看自己的内容，管理员负责审核、记录和异常处理。';
+  }
+  if (/范围|栏目|内容|交付/.test(title + question)) {
+    return '首版只覆盖最关键的使用路径和必须交付内容，暂时不做会明显拉长周期的扩展能力。';
+  }
+  if (/验收|标准|里程碑|成功/.test(title + question)) {
+    return '验收时按可运行流程、关键页面、移动端适配和待确认清单逐项检查，不把未确认内容写成最终承诺。';
+  }
+  if (/风险|边界|变更/.test(title + question)) {
+    return '成本、周期和责任边界需要提前写清楚；不确定项先保留为待确认，后续再决定是否进入正式范围。';
+  }
+  if (/方案|取舍/.test(title + question)) {
+    return '优先选择能最快验证核心目标的方案，复杂能力放到后续版本，避免首版范围失控。';
+  }
+  return `${projectTitle ?? '这个项目'}先按当前节点继续确认：首版聚焦最重要的目标、对象、场景和完成标准，暂不把未确认内容当成最终承诺。`;
 }
 
 function FormalAiContextCard({
@@ -348,7 +496,7 @@ function FormalAiContextCard({
             ? hasUserMessage
               ? '正在根据你的回答更新当前节点。'
               : '正在根据项目说明生成当前节点。'
-            : firstQuestion}
+            : `当前追问：${firstQuestion}`}
         </span>
       </div>
       <div className="formal-ai-context-card__mini">

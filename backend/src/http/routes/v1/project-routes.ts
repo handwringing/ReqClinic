@@ -65,6 +65,18 @@ const ALLOWED_MEDIA_TYPES: ReadonlySet<string> = new Set([
   'image/jpeg',
 ]);
 
+const FORMAL_NEED_HINT =
+  '这句话还不够像一个项目需求，请补充你想做什么、给谁用、希望得到什么结果。';
+
+function looksLikeFormalNeed(value: string): boolean {
+  const text = value.trim();
+  if (!text) return false;
+  if (/^[\d\s.,，。:：;；!?！？_-]+$/.test(text)) return false;
+  const compact = text.replace(/\s+/g, '');
+  if (/^[a-zA-Z0-9_-]+$/.test(compact) && !/[一-龥]/.test(compact)) return false;
+  return true;
+}
+
 /** File-signature (magic-byte) expectations per media-type family. */
 interface SignatureRule {
   /** Expected leading bytes, as a hex string (lowercase). */
@@ -174,6 +186,16 @@ export function registerProjectRoutes(
           initial_request: 'must be a non-empty string',
         });
       }
+      const sourceKind = body.source_kind === 'sample' ? 'sample' : 'custom';
+      const sourceCaseId =
+        typeof body.source_case_id === 'string' && body.source_case_id.trim()
+          ? body.source_case_id.trim()
+          : null;
+      if (sourceKind === 'custom' && !looksLikeFormalNeed(initialRequest)) {
+        throw ApiError.validationError({
+          initial_request: FORMAL_NEED_HINT,
+        });
+      }
 
       const userId = await resolveFormalUserId(ctx, {
         userRepo: deps.userRepo,
@@ -200,12 +222,6 @@ export function registerProjectRoutes(
           : [],
         submittedBy: userId,
       });
-
-      const sourceKind = body.source_kind === 'sample' ? 'sample' : 'custom';
-      const sourceCaseId =
-        typeof body.source_case_id === 'string' && body.source_case_id.trim()
-          ? body.source_case_id.trim()
-          : null;
 
       if (sourceKind === 'sample' && deps.formalMapRepo) {
         const snapshot = buildDeterministicFormalSnapshot({

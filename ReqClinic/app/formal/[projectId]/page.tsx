@@ -21,9 +21,12 @@ export function generateStaticParams() {
 
 export default async function FormalPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams?: Promise<{ source?: string }>;
 }) {
   const { projectId } = await params;
-  return <FormalAnalysisPage projectId={projectId} />;
+  const source = (await searchParams)?.source;
+  return <FormalAnalysisPage projectId={projectId} routeSource={source} />;
 }

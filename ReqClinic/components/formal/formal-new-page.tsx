@@ -2,10 +2,12 @@
 
 import { ArrowLeft, FileText, PlayCircle, SendHorizontal, Sparkles, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ProductBrandText } from '@/components/common/product-brand';
 import { AppBackground } from '@/components/layout/app-background';
 import { getApiClient } from '@/lib/api';
+import { hasModelApiAccess, looksLikeRequirementInput, REQUIREMENT_INPUT_HINT } from '@/lib/intake-guards';
+import { PRODUCT_TERMS } from '@/lib/product-language';
 
 const FORMAL_DEMO_CASES = [
   {
@@ -53,6 +55,8 @@ export function FormalNewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [launchingDemoId, setLaunchingDemoId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState('');
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const demoPanelRef = useRef<HTMLElement | null>(null);
 
   const generatedTitle = useMemo(() => {
     const text = description.trim();
@@ -62,13 +66,24 @@ export function FormalNewPage() {
 
   const createProject = async () => {
     const cleanDescription = description.trim();
-    if (!cleanDescription || submitting) {
+    if (submitting) return;
+    if (!cleanDescription) {
       setErrorText('先写一段项目描述，说明要做什么和第一版交付给谁。');
       return;
     }
     setSubmitting(true);
     setErrorText('');
+    let keepSubmitting = false;
     try {
+      const modelReady = await hasModelApiAccess();
+      if (!modelReady) {
+        setModelDialogOpen(true);
+        return;
+      }
+      if (!looksLikeRequirementInput(cleanDescription)) {
+        setErrorText(REQUIREMENT_INPUT_HINT);
+        return;
+      }
       const api = getApiClient();
       const accepted = await api.createProject({
         title: title.trim() || generatedTitle,
@@ -90,10 +105,12 @@ export function FormalNewPage() {
         source_kind: 'custom',
       });
       const projectId = accepted.project_id ?? accepted.job_id;
+      keepSubmitting = true;
       router.push(`/formal/${projectId}`);
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : '创建项目失败');
-      setSubmitting(false);
+    } finally {
+      if (!keepSubmitting) setSubmitting(false);
     }
   };
 
@@ -124,8 +141,13 @@ export function FormalNewPage() {
     }
   };
 
+  const scrollToExamples = () => {
+    setModelDialogOpen(false);
+    demoPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
-    <div style={{ position: 'relative', minHeight: '100vh' }}>
+    <div className="formal-entry-page" style={{ position: 'relative', minHeight: '100vh' }}>
       <AppBackground />
       <header className="app-topbar">
         <div className="brand-mark" style={{ gap: 12 }}>
@@ -290,7 +312,7 @@ export function FormalNewPage() {
           </div>
         </section>
 
-        <section className="formal-demo-panel" aria-label="正式项目参考案例">
+        <section ref={demoPanelRef} className="formal-demo-panel" aria-label="正式项目参考案例">
           <div>
             <div className="app-label" style={{ marginBottom: 10 }}>
               <Sparkles className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
@@ -332,6 +354,26 @@ export function FormalNewPage() {
         </section>
         </div>
       </main>
+
+      {modelDialogOpen && (
+        <div className="model-key-modal" role="dialog" aria-modal="true" aria-labelledby="formal-model-title">
+          <div className="model-key-panel">
+            <div className="model-key-kicker">{PRODUCT_TERMS.modelUnavailableKicker}</div>
+            <h2 id="formal-model-title">暂时不能创建自定义正式项目</h2>
+            <p>
+              当前环境还没有可用的模型服务，暂时不能从你输入的内容生成需求地图。你可以先查看参考案例，了解正式项目工作台的分析方式。
+            </p>
+            <div className="model-key-actions">
+              <button type="button" className="model-key-secondary" onClick={() => setModelDialogOpen(false)}>
+                留在这里
+              </button>
+              <button type="button" className="model-key-primary" onClick={scrollToExamples}>
+                {PRODUCT_TERMS.viewExamples}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   CheckCircle2,
   CircleDashed,
@@ -606,8 +606,11 @@ export function FormalAnalysisPage({ projectId, routeSource }: FormalAnalysisPag
   const router = useRouter();
   const routeSourceKind = projectSourceFromRoute(routeSource ?? null);
   const [collapsed, setCollapsed] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(390);
+  const [demoStepIndex, setDemoStepIndex] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [externalBinding, setExternalBinding] = useState<ExternalBinding | undefined>();
+  const [bindingNotice, setBindingNotice] = useState<string | null>(null);
   const [data, setData] = useState<PageData>(() => buildInitialPageData(projectId));
 
   useEffect(() => {
@@ -703,11 +706,18 @@ export function FormalAnalysisPage({ projectId, routeSource }: FormalAnalysisPag
       routeSourceKind={routeSourceKind}
       collapsed={collapsed}
       onTogglePanel={setCollapsed}
+      panelWidth={panelWidth}
+      onPanelWidthChange={setPanelWidth}
+      demoStepIndex={demoStepIndex}
+      onDemoStepIndexChange={setDemoStepIndex}
       externalBinding={externalBinding}
+      bindingNotice={bindingNotice}
       onRefresh={() => setRefreshKey((value) => value + 1)}
       onAddBinding={(binding) => {
+        setBindingNotice(null);
         setExternalBinding({ ...binding, nonce: Date.now() });
       }}
+      onBindingRejected={setBindingNotice}
     />
   );
 }
@@ -720,9 +730,15 @@ function FormalMapShell({
   routeSourceKind,
   collapsed,
   onTogglePanel,
+  panelWidth,
+  onPanelWidthChange,
+  demoStepIndex,
+  onDemoStepIndexChange,
   externalBinding,
+  bindingNotice,
   onRefresh,
   onAddBinding,
+  onBindingRejected,
 }: {
   project: Project;
   formalMap: FormalMapResponse | null;
@@ -731,18 +747,33 @@ function FormalMapShell({
   routeSourceKind?: ProjectSourceKind;
   collapsed: boolean;
   onTogglePanel: (collapsed: boolean) => void;
+  panelWidth: number;
+  onPanelWidthChange: (width: number) => void;
+  demoStepIndex: number;
+  onDemoStepIndexChange: (value: number) => void;
   externalBinding?: ExternalBinding;
+  bindingNotice?: string | null;
   onRefresh: () => void;
   onAddBinding: (binding: FormalBinding) => void;
+  onBindingRejected: (message: string) => void;
 }) {
   const canvas = useMemo(
     () => formalMap?.snapshot?.data ? canvasFromSnapshot(formalMap.snapshot.data) : getFormalCanvas(project.title),
     [formalMap?.snapshot?.data, project.title],
   );
   const [activeModuleId, setActiveModuleId] = useState(canvas.currentModuleId);
+  const demoModules = useMemo(() => {
+    const currentIndex = Math.max(0, canvas.modules.findIndex((module) => module.id === canvas.currentModuleId));
+    const ordered = [
+      ...canvas.modules.slice(currentIndex),
+      ...canvas.modules.slice(0, currentIndex),
+    ];
+    return ordered.slice(0, Math.min(3, ordered.length));
+  }, [canvas.currentModuleId, canvas.modules]);
 
   useEffect(() => {
     setActiveModuleId(canvas.currentModuleId);
+    onDemoStepIndexChange(0);
   }, [canvas.currentModuleId]);
 
   const activeModule =
@@ -765,6 +796,63 @@ function FormalMapShell({
   const hasUserMessage = formalMap?.messages.some((message) => message.role === 'user') ?? false;
   const sourceKind = project.source_kind ?? routeSourceKind;
   const isSampleProject = sourceKind === 'sample';
+  const isGuidedDemoProject = sourceKind === 'sample' || sourceKind === 'quick_upgrade';
+  const demoFlowComplete = isGuidedDemoProject && demoStepIndex >= demoModules.length;
+  const demoTargetModule =
+    isGuidedDemoProject
+      ? demoModules[Math.min(demoStepIndex, Math.max(0, demoModules.length - 1))] ?? activeModule
+      : activeModule;
+  const displayModule = isGuidedDemoProject ? demoTargetModule : activeModule;
+  const requiredBindingId =
+    isGuidedDemoProject && !demoFlowComplete ? moduleToBinding(displayModule).id : undefined;
+  const addBindingWithDemoRules = (binding: FormalBinding) => {
+    if (demoFlowComplete) {
+      onBindingRejected('本轮确认已完成，可以查看报告或返回入口。');
+      return;
+    }
+    if (isGuidedDemoProject && requiredBindingId && binding.id !== requiredBindingId) {
+      onBindingRejected(`这一步请先加入「${displayModule.title}」节点。`);
+      return;
+    }
+    onAddBinding(binding);
+  };
+  const selectModuleWithDemoRules = (moduleId: string) => {
+    if (isGuidedDemoProject && !demoFlowComplete && moduleId !== displayModule.id) {
+      onBindingRejected(`这一步先处理「${displayModule.title}」，其他节点稍后再看。`);
+      return;
+    }
+    setActiveModuleId(moduleId);
+  };
+  const completeDemoStep = () => {
+    const nextIndex = demoStepIndex + 1;
+    onDemoStepIndexChange(nextIndex);
+    if (nextIndex < demoModules.length) {
+      const nextModule = demoModules[nextIndex];
+      setActiveModuleId(nextModule.id);
+      onBindingRejected(`已记录。下一步请加入「${nextModule.title}」节点。`);
+      return;
+    }
+    onBindingRejected('本轮确认已完成，可以查看报告或返回入口。');
+  };
+  const resizePanel = (nextWidth: number) => {
+    const viewportLimit = typeof window === 'undefined' ? 560 : Math.max(320, Math.min(620, window.innerWidth - 860));
+    onPanelWidthChange(Math.min(Math.max(nextWidth, 320), viewportLimit));
+  };
+  const startPanelResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (collapsed) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = panelWidth;
+    const handleMove = (moveEvent: PointerEvent) => {
+      resizePanel(startWidth + moveEvent.clientX - startX);
+    };
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+  };
 
   return (
     <div className="formal-analysis-shell" style={{ position: 'relative', height: '100vh', overflow: 'hidden' }}>
@@ -798,12 +886,47 @@ function FormalMapShell({
             onToggle={onTogglePanel}
             projectTitle={project.title}
             projectId={project.id}
-            activeModule={activeModule}
+            activeModule={displayModule}
             externalBinding={externalBinding}
             messages={formalMap?.messages ?? []}
             activeJobId={formalMap?.active_job_id ?? null}
+            isGuidedDemo={isGuidedDemoProject}
+            panelWidth={panelWidth}
+            requiredBindingId={requiredBindingId}
+            demoNotice={bindingNotice}
+            demoFlowComplete={demoFlowComplete}
+            onDemoStepComplete={completeDemoStep}
             onSubmitted={onRefresh}
           />
+          {!collapsed && (
+            <div
+              className="formal-panel-resizer"
+              role="separator"
+              aria-label="调整对话和需求地图比例"
+              aria-orientation="vertical"
+              tabIndex={0}
+              onPointerDown={startPanelResize}
+              onDoubleClick={() => onPanelWidthChange(390)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowLeft') {
+                  event.preventDefault();
+                  resizePanel(panelWidth - 24);
+                }
+                if (event.key === 'ArrowRight') {
+                  event.preventDefault();
+                  resizePanel(panelWidth + 24);
+                }
+                if (event.key === 'Home') {
+                  event.preventDefault();
+                  onPanelWidthChange(320);
+                }
+                if (event.key === 'End') {
+                  event.preventDefault();
+                  resizePanel(620);
+                }
+              }}
+            />
+          )}
           <main className="formal-map-workbench-main">
             <FormalMapWorkspace
               projectTitle={project.title}
@@ -812,10 +935,11 @@ function FormalMapShell({
               isSampleProject={isSampleProject}
               activeJobId={formalMap?.active_job_id ?? null}
               hasUserMessage={hasUserMessage}
-              activeModule={activeModule}
-              activeModuleId={activeModule.id}
-              onSelectModule={setActiveModuleId}
-              onAddBinding={onAddBinding}
+              activeModule={displayModule}
+              activeModuleId={displayModule.id}
+              onSelectModule={selectModuleWithDemoRules}
+              onAddBinding={addBindingWithDemoRules}
+              requiredBindingId={requiredBindingId}
             />
           </main>
         </div>
@@ -835,6 +959,7 @@ function FormalMapWorkspace({
   activeModuleId,
   onSelectModule,
   onAddBinding,
+  requiredBindingId,
 }: {
   projectTitle: string;
   canvas: QuickDemoGuidanceCanvas;
@@ -846,6 +971,7 @@ function FormalMapWorkspace({
   activeModuleId: string;
   onSelectModule: (id: string) => void;
   onAddBinding: (binding: FormalBinding) => void;
+  requiredBindingId?: string;
 }) {
   const rootTitle = canvas.title.replace(/详细指导$/, '').replace(/需求地图$/, '');
   const knownCount = canvas.modules.reduce((sum, module) => sum + module.known.length, 0);
@@ -853,7 +979,7 @@ function FormalMapWorkspace({
   const [reportOpen, setReportOpen] = useState(false);
   const [reportTab, setReportTab] = useState<FormalReportTab>('overview');
   const [mobilePanel, setMobilePanel] = useState<FormalMobilePanel>('current');
-  const reportProjection = mapSnapshot?.reportProjection ?? null;
+  const reportProjection = mapSnapshot?.reportProjection ?? buildLocalReportProjection(projectTitle, canvas);
   const exportDocument = useMemo(
     () => buildFormalExportDocument(projectTitle, canvas, mapSnapshot),
     [projectTitle, canvas, mapSnapshot],
@@ -969,27 +1095,50 @@ function FormalMapWorkspace({
               <small>当前内容只是整理结果，重要结论会在各节点里继续确认。</small>
             </div>
             <div className="formal-map-main-branches">
-              {canvas.modules.map((module, index) => (
-                <button
+              {canvas.modules.map((module, index) => {
+                const binding = moduleToBinding(module);
+                const isRequiredBinding = requiredBindingId === binding.id;
+                return (
+                <article
                   key={module.id}
-                  type="button"
-                  className={`formal-map-main-node ${module.id === activeModuleId ? 'formal-map-main-node--active' : ''}`}
-                  onClick={() => onSelectModule(module.id)}
+                  className={[
+                    'formal-map-main-node',
+                    module.id === activeModuleId ? 'formal-map-main-node--active' : '',
+                    isRequiredBinding ? 'formal-map-main-node--required' : '',
+                  ].filter(Boolean).join(' ')}
                 >
-                  <span className="formal-map-main-node__index">{index + 1}</span>
-                  <span className="formal-map-main-node__body">
-                    <span className="formal-map-main-node__title">{module.title}</span>
-                    <span className="formal-map-main-node__summary">{module.summary}</span>
+                  <button
+                    type="button"
+                    className="formal-map-main-node__select"
+                    onClick={() => onSelectModule(module.id)}
+                    aria-pressed={module.id === activeModuleId}
+                  >
+                    <span className="formal-map-main-node__index">{index + 1}</span>
+                    <span className="formal-map-main-node__body">
+                      <span className="formal-map-main-node__title">{module.title}</span>
+                      <span className="formal-map-main-node__summary">{module.summary}</span>
+                    </span>
+                  </button>
+                  <span className="formal-map-main-node__meta">
+                    <span className={`formal-map-status formal-map-status--${statusTone(module.status)}`}>
+                      {displayModuleStatus(module.status)}
+                    </span>
+                    <button
+                      type="button"
+                      className={`formal-map-main-node__add ${isRequiredBinding ? 'is-required' : ''}`}
+                      onClick={() => onAddBinding(binding)}
+                    >
+                      <Sparkles size={12} strokeWidth={1.5} aria-hidden="true" />
+                      加入
+                    </button>
                   </span>
-                  <span className={`formal-map-status formal-map-status--${statusTone(module.status)}`}>
-                    {displayModuleStatus(module.status)}
-                  </span>
-                </button>
-              ))}
+                </article>
+                );
+              })}
             </div>
           </div>
           <div className="formal-map-map-notes" aria-label="地图操作">
-            {['点击节点切换当前问题', '把节点或方案加入对话', '报告按当前地图生成'].map((item, index) => (
+            {['点击节点切换当前问题', '点“加入”引用节点', '报告按当前地图生成'].map((item, index) => (
               <div key={item}>
                 <span>{index + 1}</span>
                 <strong>{item}</strong>
@@ -1211,6 +1360,57 @@ function buildFormalExportDocument(
     `- 来源：当前需求地图（${canvas.modules.length} 个节点）`,
     '- 说明：该文档只能反映当前版本地图，不替代人工确认。',
   ].join('\n');
+}
+
+function buildLocalReportProjection(
+  projectTitle: string,
+  canvas: QuickDemoGuidanceCanvas,
+): FormalMapData['reportProjection'] {
+  const knownItems = canvas.modules.flatMap((module) =>
+    module.known.map((item) => `${module.title}：${item}`),
+  );
+  const pendingItems = canvas.modules.flatMap((module) =>
+    module.questions.map((item) => `${module.title}：${item}`),
+  );
+  const optionItems = canvas.modules.flatMap((module) =>
+    (module.options ?? []).map((option) => (
+      `${module.title} / ${option.title}：${option.fit}；取舍：${option.tradeoff}`
+    )),
+  );
+  const overview = [
+    `${projectTitle}已经整理成 ${canvas.modules.length} 个需求地图节点。`,
+    knownItems.length > 0
+      ? `目前比较明确的是：${knownItems.slice(0, 3).join('；')}。`
+      : '目前还需要先确认项目起点、对象、范围和完成标准。',
+    pendingItems.length > 0
+      ? `下一步建议先确认：${pendingItems.slice(0, 3).join('；')}。`
+      : '当前没有明显待确认项，可以进入专业报告复核。',
+  ].join('\n\n');
+  const detailedReport = [
+    `# ${projectTitle}需求分析报告`,
+    '',
+    '## 1. 项目背景',
+    '',
+    `当前项目已被拆分为 ${canvas.modules.length} 个需求地图节点，用于围绕目标、对象、范围、方案、风险和报告进行逐步确认。`,
+    '',
+    '## 2. 已整理内容',
+    '',
+    ...(knownItems.length > 0 ? knownItems.map((item) => `- ${item}`) : ['- 暂无已明确内容。']),
+    '',
+    '## 3. 方案与取舍',
+    '',
+    ...(optionItems.length > 0 ? optionItems.map((item) => `- ${item}`) : ['- 暂无可选方案。']),
+    '',
+    '## 4. 待确认内容',
+    '',
+    ...(pendingItems.length > 0 ? pendingItems.map((item) => `- ${item}`) : ['- 暂无待确认内容。']),
+    '',
+    '## 5. 使用说明',
+    '',
+    '- 本报告来自当前需求地图。未确认内容只能作为待确认项，不应直接写成最终承诺。',
+    '- 后续调整应先回到对应节点确认，再进入新的报告版本。',
+  ].join('\n');
+  return { overview, detailedReport };
 }
 
 function StatTile({

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
   Check,
   ListChecks,
@@ -12,6 +13,8 @@ import {
   Trophy,
   XCircle,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ProductBrandText } from '@/components/common/product-brand';
 import type { TrainingAttempt, TrainingFeedback } from '@/lib/api/types';
 
 export interface TrainingFeedbackPageProps {
@@ -37,36 +40,6 @@ interface TrainingTrendEntry {
 }
 
 const VISIBLE_DIMENSIONS: VisibleDimension[] = ['目标', '对象', '场景', '边界', '验收'];
-
-function trendStorageKey(caseId: string): string {
-  return `reqclinic.training.trend.${caseId}`;
-}
-
-function readTrainingTrend(caseId: string): TrainingTrendEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(trendStorageKey(caseId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is TrainingTrendEntry => (
-      item &&
-      typeof item === 'object' &&
-      typeof item.attemptId === 'string' &&
-      typeof item.caseId === 'string' &&
-      typeof item.score === 'number' &&
-      item.dimensions &&
-      typeof item.dimensions === 'object'
-    ));
-  } catch {
-    return [];
-  }
-}
-
-function writeTrainingTrend(caseId: string, entries: TrainingTrendEntry[]) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(trendStorageKey(caseId), JSON.stringify(entries.slice(0, 6)));
-}
 
 function visibleDimensionFor(label: string): VisibleDimension {
   if (/目标|结果|成功|价值|指标/.test(label)) return '目标';
@@ -116,6 +89,7 @@ export function TrainingFeedbackPage({
   onRetry,
   onComplete,
 }: TrainingFeedbackPageProps) {
+  const router = useRouter();
   const [retrying, setRetrying] = useState(false);
   const [completing, setCompleting] = useState(false);
   const isCompleted = attempt.status === 'completed';
@@ -128,23 +102,10 @@ export function TrainingFeedbackPage({
   const totalPct = normalizeCoverageScore(feedback.coverage_score);
   const passThreshold = 60;
   const isPass = totalPct >= passThreshold;
-  const [trendHistory, setTrendHistory] = useState<TrainingTrendEntry[]>(() =>
-    readTrainingTrend(attempt.case_id),
-  );
   const currentTrend = useMemo(
     () => buildTrendEntry(attempt, feedback, totalPct),
     [attempt, feedback, totalPct],
   );
-  const previousTrend = trendHistory.find((entry) => entry.attemptId !== attempt.attempt_id) ?? null;
-
-  useEffect(() => {
-    setTrendHistory((history) => {
-      const withoutCurrent = history.filter((entry) => entry.attemptId !== attempt.attempt_id);
-      const next = [currentTrend, ...withoutCurrent].slice(0, 6);
-      writeTrainingTrend(attempt.case_id, next);
-      return next;
-    });
-  }, [attempt.attempt_id, attempt.case_id, currentTrend]);
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -165,13 +126,59 @@ export function TrainingFeedbackPage({
   };
 
   return (
-    <div className="training-feedback-shell" style={{ position: 'relative', minHeight: '100vh' }}>
+    <div
+      className="training-feedback-shell"
+      style={{
+        position: 'relative',
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <header className="app-topbar" style={{ flexShrink: 0 }}>
+        <div className="brand-mark" style={{ gap: 12 }}>
+          <button
+            type="button"
+            className="app-nav-back"
+            onClick={() => router.back()}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+            返回
+          </button>
+          <span
+            aria-hidden="true"
+            style={{ width: 1, height: 16, background: 'var(--aurora-hair-strong)' }}
+          />
+          <button
+            type="button"
+            className="brand-mark brand-home-link"
+            onClick={() => router.push('/')}
+            aria-label="返回首页"
+          >
+            <span className="dot" />
+            <ProductBrandText />
+          </button>
+        </div>
+        <div className="meta" style={{ gap: 8 }}>
+          <span className="app-chip app-chip-muted">
+            表达训练
+          </span>
+          {isSampleAttempt && (
+            <span className="app-chip app-chip-muted">
+              参考练习
+            </span>
+          )}
+        </div>
+      </header>
       <main
         className="training-feedback-main"
         style={{
           maxWidth: 880,
           margin: '0 auto',
-          padding: '48px 24px 120px',
+          width: '100%',
+          padding: '28px 24px 120px',
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         {/* 顶部总分 */}
@@ -210,11 +217,6 @@ export function TrainingFeedbackPage({
               </div>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              {isSampleAttempt && (
-                <span className="app-chip app-chip-muted">
-                  参考练习
-                </span>
-              )}
               {isCompleted && (
                 <span className="app-chip app-chip-sage">
                   <Check
@@ -271,30 +273,25 @@ export function TrainingFeedbackPage({
           </p>
         </header>
 
-        <section className="mt-6 app-card app-card-pad" aria-label="学习轨迹">
+        <section className="mt-6 app-card app-card-pad" aria-label="本轮覆盖概览">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="app-label" style={{ marginBottom: 6 }}>
-                学习轨迹
+                本轮覆盖
               </div>
               <h2 className="app-title app-title-md">本轮追问覆盖</h2>
             </div>
             <span className="app-chip app-chip-muted">
-              {previousTrend ? `较上轮 ${totalPct - previousTrend.score >= 0 ? '+' : ''}${totalPct - previousTrend.score}%` : '首次记录'}
+              本次结果
             </span>
           </div>
           <div className="training-trend-grid" style={{ marginTop: 14 }}>
             {VISIBLE_DIMENSIONS.map((dimension) => {
               const status = currentTrend.dimensions[dimension];
-              const previous = previousTrend?.dimensions[dimension];
-              const improved = previous && previous !== 'covered' && status === 'covered';
               return (
                 <div key={dimension} className={`training-trend-card training-trend-card--${status}`}>
                   <span>{dimension}</span>
                   <strong>{dimensionLabel(status)}</strong>
-                  {previous && previous !== status && (
-                    <small>{improved ? '本轮补上了' : `上轮：${dimensionLabel(previous)}`}</small>
-                  )}
                 </div>
               );
             })}
@@ -307,7 +304,7 @@ export function TrainingFeedbackPage({
               color: 'var(--aurora-muted)',
             }}
           >
-            趋势只保存在当前浏览器里，用来帮助你同类情境复练；不会写入真实项目或需求地图。
+            本页只展示这一次练习的结果；重新再来会回到当前案例开头。
           </p>
         </section>
 
@@ -579,7 +576,7 @@ export function TrainingFeedbackPage({
                 aria-hidden="true"
               />
             )}
-            同类再练一次
+            重新再来
           </button>
           <button
             type="button"

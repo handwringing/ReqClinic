@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiClient } from '@/lib/api';
 import trainingCasesFixture from '@/fixtures/training/cases.json';
-import { staticTrainingAttemptCase } from '@/lib/static-demo-ids';
+import { staticTrainingAttemptCase, trainingStaticAttemptId } from '@/lib/static-demo-ids';
 import type {
   TrainingAttempt,
   TrainingCase,
@@ -32,7 +32,6 @@ const FEEDBACK_STATES: TrainingAttempt['status'][] = [
   'completed',
 ];
 
-const SAMPLE_FEEDBACK_KEY_PREFIX = 'reqclinic:training-sample-feedback:';
 const TRAINING_FIXTURE_CASES = (trainingCasesFixture as { cases: TrainingCase[] }).cases;
 
 function buildStaticTrainingInitial(attemptId: string): { attempt: TrainingAttempt; trainingCase: TrainingCase } | null {
@@ -56,25 +55,6 @@ function buildStaticTrainingInitial(attemptId: string): { attempt: TrainingAttem
     },
     trainingCase,
   };
-}
-
-function readStoredSampleFeedback(attemptId: string): TrainingFeedback | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(`${SAMPLE_FEEDBACK_KEY_PREFIX}${attemptId}`);
-    return raw ? (JSON.parse(raw) as TrainingFeedback) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredSampleFeedback(attemptId: string, feedback: TrainingFeedback): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(`${SAMPLE_FEEDBACK_KEY_PREFIX}${attemptId}`, JSON.stringify(feedback));
-  } catch {
-    // Local demo recovery only.
-  }
 }
 
 function trainingSourceFromRoute(value?: string): TrainingAttempt['source_kind'] | undefined {
@@ -107,11 +87,6 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
     setSummaryJobId(null);
 
     if (staticInitial) {
-      const storedSampleFeedback = readStoredSampleFeedback(attemptId);
-      if (storedSampleFeedback) {
-        setFeedback(storedSampleFeedback);
-        setAttempt({ ...staticInitial.attempt, status: 'feedback_ready' });
-      }
       return () => {
         cancelled = true;
       };
@@ -125,15 +100,7 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
           ...a,
           source_kind: a.source_kind ?? routeSourceKind,
         };
-        const storedSampleFeedback =
-          normalizedAttempt.source_kind === 'sample'
-            ? readStoredSampleFeedback(attemptId)
-            : null;
-        setAttempt(
-          storedSampleFeedback
-            ? { ...normalizedAttempt, status: 'feedback_ready' }
-            : normalizedAttempt,
-        );
+        setAttempt(normalizedAttempt);
         const versionDetail = await getApiClient().getTrainingCaseVersion(normalizedAttempt.case_id, normalizedAttempt.case_version);
         if (cancelled) return;
         // 将版本详情映射为 TrainingCase 以保留展示字段。
@@ -146,9 +113,7 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
           description: versionDetail.description,
         };
         setTrainingCase(c);
-        if (storedSampleFeedback) {
-          setFeedback(storedSampleFeedback);
-        } else if (FEEDBACK_STATES.includes(normalizedAttempt.status)) {
+        if (FEEDBACK_STATES.includes(normalizedAttempt.status)) {
           const fb = await getApiClient().getTrainingFeedback(attemptId);
           if (cancelled) return;
           setFeedback(fb);
@@ -227,7 +192,6 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
 
   const handleSummarySubmitted = useCallback((jobId: string, localFeedback?: TrainingFeedback) => {
     if (localFeedback) {
-      writeStoredSampleFeedback(attemptId, localFeedback);
       setFeedback(localFeedback);
       setAttempt((current) =>
         current ? { ...current, status: 'feedback_ready' } : current,
@@ -238,10 +202,33 @@ export function TrainingPage({ attemptId, routeSource }: TrainingPageProps) {
     }
     setSummaryJobId(jobId);
     setSummarySubmitted(true);
-  }, [attemptId]);
+  }, []);
 
   const handleRetry = useCallback(async () => {
     if (!attempt) return;
+    if (attempt.source_kind === 'sample' || attempt.case_version === 'demo') {
+      const resetAttemptId = trainingStaticAttemptId(attempt.case_id);
+      const resetInitial = buildStaticTrainingInitial(resetAttemptId);
+      setFeedback(null);
+      setSummarySubmitted(false);
+      setSummaryJobId(null);
+      setRetryCount((count) => count + 1);
+      if (resetInitial) {
+        setAttempt(resetInitial.attempt);
+        setTrainingCase(resetInitial.trainingCase);
+        setLoadStatus('ready');
+      } else {
+        setAttempt({
+          ...attempt,
+          attempt_id: resetAttemptId,
+          status: 'interviewing',
+          question_count: 0,
+          completed_at: null,
+        });
+      }
+      router.replace(`/training/${resetAttemptId}?reset=${Date.now()}`);
+      return;
+    }
     // 创建同案例的新尝试并跳转
     const created = await getApiClient().createTrainingAttempt({
       case_id: attempt.case_id,
