@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:sites": "cross-env NEXT_PUBLIC_API_TRANSPORT=mock WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "cross-env NEXT_BUILD_OUTPUT=.next-build next build",
+    "build:sites": "cross-env NEXT_PUBLIC_API_TRANSPORT=mock WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "build:pages": "cross-env GITHUB_PAGES=true GITHUB_PAGES_REPO=ReqClinic NEXT_BUILD_OUTPUT=.next-pages NEXT_PUBLIC_API_TRANSPORT=mock next build",
     "start": "cross-env NEXT_BUILD_OUTPUT=.next-build next start",
     "lint": "next lint",
@@ -23,15 +25,23 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.26",
     "autoprefixer": "^10.4.20",
     "cross-env": "^10.1.0",
     "eslint": "^9.17.0",
     "eslint-config-next": "^15.1.0",
     "postcss": "^8.4.49",
+    "react-server-dom-webpack": "19.2.7",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.0"
-  }
+    "typescript": "^5.7.0",
+    "vinext": "0.0.50",
+    "vite": "8.0.13",
+    "wrangler": "4.92.0"
+  },
+  "type": "module"
 }
