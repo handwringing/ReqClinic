@@ -250,7 +250,9 @@ export function registerProjectRoutes(
             sourceCaseId,
           }),
         });
-        deps.formalMapRepo.appendAiTurnOnce(project.id, snapshot.nextQuestion, 'question');
+        if (snapshot.nextQuestion) {
+          deps.formalMapRepo.appendAiTurnOnce(project.id, snapshot.nextQuestion, 'question');
+        }
         return {
           data: {
             project_id: project.id,

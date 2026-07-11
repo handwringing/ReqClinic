@@ -8,10 +8,13 @@ import { ApiClientError } from '@/lib/api/errors';
 import type { BriefVersion, BriefView } from '@/lib/api/types';
 import {
   ErrorState,
+  ConfirmDialog,
   ToastProvider,
   useToast,
 } from '@/components/ui';
 import { AppBackground } from '@/components/layout/app-background';
+import { ModelUnavailableDialog } from '@/components/common/model-unavailable-dialog';
+import { useModelApiGate } from '@/lib/use-model-api-gate';
 import { buildQuickDemoFixture, getQuickDemoCase } from '@/lib/quick-demo-cases';
 import { BriefTopbar } from './brief-topbar';
 import { BriefViews } from './brief-views';
@@ -97,6 +100,10 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
   const [exportContent, setExportContent] = useState<string>(initialBrief?.exportContent ?? '');
   const [loading, setLoading] = useState(initialBrief === null);
   const [upgrading, setUpgrading] = useState(false);
+  const [sampleUpgradeNoticeOpen, setSampleUpgradeNoticeOpen] = useState(false);
+  const { modelDialogOpen, requireModelApi, dismissModelDialog } = useModelApiGate({
+    skip: isSampleSession,
+  });
   const [error, setError] = useState<Error | null>(null);
   const requestIdRef = useRef<string | undefined>(undefined);
   const { showToast } = useToast();
@@ -182,6 +189,11 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
 
   const handleUpgrade = async () => {
     if (upgrading) return;
+    if (isSampleSession) {
+      setSampleUpgradeNoticeOpen(true);
+      return;
+    }
+    if (!(await requireModelApi())) return;
     setUpgrading(true);
     try {
       const result = await getApiClient().upgradeQuickSession({
@@ -189,11 +201,11 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
         title: briefTitle,
         brief_version: currentVersion,
         expected_quick_session_version: quickSessionVersion,
-        source_kind: isSampleSession ? 'sample' : 'quick_upgrade',
+        source_kind: 'quick_upgrade',
         source_case_id: sourceCaseId,
       });
       if (result.project_id) {
-        router.push(`/formal/${result.project_id}?source=${isSampleSession ? 'sample' : 'quick_upgrade'}`);
+        router.push(`/formal/${result.project_id}?source=quick_upgrade`);
         return;
       }
       showToast({
@@ -224,7 +236,7 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
 
   if (loading && !briefVersion) {
     return (
-      <div className="app-content">
+      <div className="app-content page-motion-shell">
         <AppBackground />
         <div className="app-state-box" style={{ minHeight: '100vh' }}>
           <Loader2 className="h-5 w-5 animate-spin icon" strokeWidth={1.5} />
@@ -236,7 +248,7 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
 
   if (error && !briefVersion) {
     return (
-      <div className="app-content">
+      <div className="app-content page-motion-shell">
         <AppBackground />
         <div className="app-state-box" style={{ minHeight: '100vh' }}>
           <ErrorState
@@ -255,7 +267,7 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
   }
 
   return (
-    <div className="app-content">
+    <div className="app-content page-motion-shell">
       <AppBackground />
 
       <BriefTopbar
@@ -295,7 +307,7 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
       )}
 
       <main
-        className="mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-10"
+        className="page-motion-stage page-motion-list mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-10"
         style={{ maxWidth: 'var(--content-max-width)' }}
       >
         <BriefViews
@@ -313,6 +325,24 @@ function BriefPageInner({ sessionId }: BriefPageProps) {
           demoFlowCompleted={isSampleSession && !briefVersion.is_incomplete}
         />
       </main>
+      <ModelUnavailableDialog
+        open={modelDialogOpen}
+        title="暂时不能升级为正式项目"
+        description="当前模型服务不可用，暂时不能根据简报生成需求地图。当前简报会保留，服务恢复后可以直接重试。"
+        onDismiss={dismissModelDialog}
+      />
+      <ConfirmDialog
+        open={sampleUpgradeNoticeOpen}
+        title="参考案例不支持直接升级"
+        description="案例使用固定数据，直接升级会让后续项目状态不可控。你可以前往正式项目入口，新建一个可持续追问和更新报告的真实项目。"
+        confirmText="前往正式项目"
+        cancelText="继续查看案例"
+        onConfirm={() => {
+          setSampleUpgradeNoticeOpen(false);
+          router.push('/formal/new');
+        }}
+        onCancel={() => setSampleUpgradeNoticeOpen(false)}
+      />
     </div>
   );
 }

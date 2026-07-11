@@ -12,6 +12,7 @@ import {
   SkeletonCard,
 } from '@/components/ui';
 import { AppBackground } from '@/components/layout/app-background';
+import { trainingStaticAttemptId } from '@/lib/static-demo-ids';
 
 type DifficultyKey = TrainingCase['difficulty'];
 
@@ -33,6 +34,26 @@ const difficultyOrder: Record<DifficultyKey, number> = {
   hard: 2,
 };
 
+let trainingCasesCache: TrainingCase[] | null = null;
+let trainingCasesRequest: Promise<TrainingCase[]> | null = null;
+
+function loadTrainingCases(forceRefresh = false): Promise<TrainingCase[]> {
+  if (!forceRefresh && trainingCasesCache) return Promise.resolve(trainingCasesCache);
+  if (trainingCasesRequest) return trainingCasesRequest;
+
+  trainingCasesRequest = getApiClient()
+    .listTrainingCases({ limit: 50, offset: 0 })
+    .then((response) => {
+      trainingCasesCache = response.items;
+      return response.items;
+    })
+    .finally(() => {
+      trainingCasesRequest = null;
+    });
+
+  return trainingCasesRequest;
+}
+
 export function TrainingCaseSelect() {
   const router = useRouter();
   const [cases, setCases] = useState<TrainingCase[] | null>(null);
@@ -51,15 +72,15 @@ export function TrainingCaseSelect() {
 
   useEffect(() => {
     let cancelled = false;
-    setCases(null);
+    const cachedCases = trainingCasesCache;
+    setCases(cachedCases);
     setError(null);
-    getApiClient()
-      .listTrainingCases({ limit: 50, offset: 0 })
-      .then((res) => {
-        if (!cancelled) setCases(res.items);
+    loadTrainingCases(cachedCases !== null || reloadKey > 0)
+      .then((items) => {
+        if (!cancelled) setCases(items);
       })
       .catch((err) => {
-        if (!cancelled) {
+        if (!cancelled && !cachedCases) {
           setError(err instanceof Error ? err.message : '加载练习情境失败');
         }
       });
@@ -68,9 +89,14 @@ export function TrainingCaseSelect() {
     };
   }, [reloadKey]);
 
+  const warmTrainingCase = (trainingCase: TrainingCase) => {
+    router.prefetch(`/training/${trainingStaticAttemptId(trainingCase.id)}?source=sample`);
+  };
+
   const handleStart = async (trainingCase: TrainingCase) => {
     if (busyId !== null) return;
     setBusyId(trainingCase.id);
+    warmTrainingCase(trainingCase);
     try {
       const attempt = await getApiClient().createTrainingAttempt({
         case_id: trainingCase.id,
@@ -85,7 +111,7 @@ export function TrainingCaseSelect() {
   };
 
   return (
-    <div className="app-content" style={{ position: 'relative', minHeight: '100vh' }}>
+    <div className="app-content page-motion-shell" style={{ position: 'relative', minHeight: '100vh' }}>
       <AppBackground />
 
       {/* 顶栏 */}
@@ -117,7 +143,7 @@ export function TrainingCaseSelect() {
       </div>
 
       <main
-        className="app-content"
+        className="app-content page-motion-stage"
         style={{
           position: 'relative',
           zIndex: 4,
@@ -135,7 +161,7 @@ export function TrainingCaseSelect() {
           }}
         >
         <header
-          className="app-card app-card-pad training-cases-hero"
+          className="app-card app-card-pad training-cases-hero page-motion-panel--left"
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(0, 1fr) auto',
@@ -163,7 +189,7 @@ export function TrainingCaseSelect() {
                 fontSize: 14,
               }}
             >
-              选择一个练习案例，按建议追问一步步练习如何把模糊表达问清楚。当前练习不会影响任何项目内容。
+              选择一个案例演示，从预设追问中决定下一步，观察不同问法如何影响角色回答和反馈。演示不会影响任何项目内容。
             </p>
           </div>
           <span
@@ -181,14 +207,14 @@ export function TrainingCaseSelect() {
         </header>
 
         <section className="training-entry-layout" aria-label="表达训练入口">
-          <div className="training-demo-entry">
+          <div className="training-demo-entry page-motion-panel--right">
             <div className="app-label" style={{ marginBottom: 10 }}>
               <PlayCircle size={14} strokeWidth={1.5} aria-hidden="true" />
-              参考案例
+              案例演示
             </div>
-            <h2 className="app-title app-title-md">选择一个练习案例</h2>
+            <h2 className="app-title app-title-md">选择一个演示案例</h2>
             <p className="training-entry-desc">
-              每个案例都有明确背景、建议追问和反馈结果。你只需要按步骤练习，系统会自动整理总结。
+              每个案例都有不同的角色、信息边界和反馈重点。进入后请选择预设追问，案例会按你的选择继续展开。
             </p>
           </div>
 
@@ -226,6 +252,7 @@ export function TrainingCaseSelect() {
                   </div>
                 ) : (
                   <div
+                    className="page-motion-list"
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -240,6 +267,9 @@ export function TrainingCaseSelect() {
                           key={c.id}
                           type="button"
                           onClick={() => void handleStart(c)}
+                          onPointerEnter={() => warmTrainingCase(c)}
+                          onPointerDown={() => warmTrainingCase(c)}
+                          onFocus={() => warmTrainingCase(c)}
                           disabled={busyId !== null}
                           className="app-card app-card-pad"
                           style={{

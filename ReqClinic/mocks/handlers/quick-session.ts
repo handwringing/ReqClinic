@@ -23,7 +23,13 @@ import type {
 import { generateUUID } from '@/lib/utils/id';
 import { ApiClientError } from '@/lib/api/errors';
 import { buildQuickDemoFixture, getQuickDemoCase, quickDemoCardTitle } from '@/lib/quick-demo-cases';
-import { formalQuickUpgradeProjectId, quickStaticSessionId } from '@/lib/static-demo-ids';
+import {
+  getQuickSampleBranchChoice,
+  getQuickSampleBranchScenario,
+  getQuickSampleRouteOptions,
+  type QuickSampleBranchChoice,
+} from '@/lib/quick-sample-branches';
+import { quickStaticSessionId } from '@/lib/static-demo-ids';
 
 // 快速问诊 Mock（21 端点）。
 // sample 案例：从快速问诊案例注册表载入预生成脚本。
@@ -253,7 +259,21 @@ function isGenericBriefFallback(view: BriefView): boolean {
 }
 
 function buildCurrentSampleFixture(store: MockSessionStore, session: QuickSession): any {
-  return buildQuickDemoFixture(session.source_case_id, getUnderstanding(store, session.id));
+  const selectedRouteId = store.get<string>(sampleRouteKey(session.id));
+  const options = getQuickSampleRouteOptions(session.source_case_id, selectedRouteId);
+  return buildQuickDemoFixture(
+    session.source_case_id,
+    getUnderstanding(store, session.id),
+    options.length > 0 ? options : undefined,
+  );
+}
+
+function sampleRouteKey(sessionId: string): string {
+  return `quick_demo_route:${sessionId}`;
+}
+
+function sampleAnswerMarksKey(sessionId: string): string {
+  return `quick_demo_answer_marks:${sessionId}`;
 }
 
 function completeCoverage(): CoverageSlot[] {
@@ -352,6 +372,20 @@ function applyUpdateMarksToUnderstanding(
     summary: current?.summary ?? '当前理解已更新。',
     slots,
     coverage_slots: coverage,
+  });
+}
+
+function applyQuickSampleRoute(
+  store: MockSessionStore,
+  session: QuickSession,
+  route: QuickSampleBranchChoice,
+): void {
+  applyUpdateMarksToUnderstanding(store, session.id, route.updateMarks);
+  const current = getUnderstanding(store, session.id);
+  if (!current) return;
+  setUnderstanding(store, session.id, {
+    ...current,
+    summary: route.summary,
   });
 }
 
@@ -584,6 +618,8 @@ function seedSampleSession(store: MockSessionStore, session: QuickSession): void
   const script: any[] = fx?.messages ?? [];
   const firstAssistant = script.find((turn) => turn?.role === 'assistant');
   const coverage = initialSampleCoverage();
+  store.set(sampleRouteKey(id), null);
+  store.set(sampleAnswerMarksKey(id), []);
 
   setCoverage(store, id, coverage);
   setUnderstanding(store, id, {
@@ -793,11 +829,49 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
         const nextIndex =
           store.get<number>(`quick_demo_next_turn_index:${request.session_id}`) ?? 1;
         const expectedUserTurn = script[nextIndex];
+        const branchScenario = getQuickSampleBranchScenario(session.source_case_id);
+        const selectedRoute = nextIndex === 1
+          ? branchScenario?.choices.find(
+              (choice) => choice.answer.trim() === request.content.trim(),
+            ) ?? null
+          : getQuickSampleBranchChoice(
+              session.source_case_id,
+              store.get<string>(sampleRouteKey(request.session_id)),
+            );
+        const expectedAnswer = nextIndex === 1
+          ? selectedRoute?.answer
+          : nextIndex === 3 && selectedRoute
+            ? selectedRoute.nextAnswer
+            : expectedUserTurn?.content;
+        if (!expectedAnswer || expectedAnswer.trim() !== request.content.trim()) {
+          throw new ApiClientError(
+            422,
+            'VALIDATION_ERROR',
+            '请从当前案例提供的回答中选择一项。',
+            generateUUID(),
+          );
+        }
+        if (nextIndex === 1 && selectedRoute) {
+          store.set(sampleRouteKey(request.session_id), selectedRoute.id);
+        }
+        const answerMarks = (expectedUserTurn?.update_marks ?? []).map((mark: string) => {
+          const [field] = String(mark).split('=');
+          return `${field}=${request.content}`;
+        });
+        const storedAnswerMarks = store.get<string[]>(sampleAnswerMarksKey(request.session_id)) ?? [];
+        const nextAnswerMarks = [...storedAnswerMarks, ...answerMarks];
+        store.set(sampleAnswerMarksKey(request.session_id), nextAnswerMarks);
 
         if (expectedUserTurn?.role === 'user') {
+          const expectedTurn = toQuickTurn(request.session_id, expectedUserTurn, 'user');
           messages.push({
-            ...toQuickTurn(request.session_id, expectedUserTurn, 'user'),
+            ...expectedTurn,
             content: request.content,
+            structured_content: {
+              paragraphs: [request.content],
+              highlights: selectedRoute && nextIndex === 1 ? [selectedRoute.routeLabel] : [],
+            },
+            update_marks: answerMarks,
             referenced_card_ids: referencedCardIds,
           });
         } else {
@@ -812,8 +886,21 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
         }
 
         const nextAssistantTurn = script[nextIndex + 1];
+        let renderedAssistantTurn: QuickSessionTurn | null = null;
         if (nextAssistantTurn?.role === 'assistant') {
-          messages.push(toQuickTurn(request.session_id, nextAssistantTurn, 'assistant'));
+          const expectedTurn = toQuickTurn(request.session_id, nextAssistantTurn, 'assistant');
+          renderedAssistantTurn = selectedRoute && nextIndex === 1
+            ? {
+                ...expectedTurn,
+                content: selectedRoute.nextQuestion,
+                structured_content: {
+                  paragraphs: [selectedRoute.nextQuestion],
+                  highlights: [selectedRoute.routeLabel, '接下来确认'],
+                },
+                follow_ups: [`沿“${selectedRoute.routeLabel}”继续确认`],
+              }
+            : expectedTurn;
+          messages.push(renderedAssistantTurn);
           store.set(`quick_demo_next_turn_index:${request.session_id}`, nextIndex + 2);
         } else {
           messages.push(makeUnderstandingReviewTurn(request.session_id, fx));
@@ -821,6 +908,11 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
         }
 
         const reachedReview = setSampleProgress(store, session, nextIndex);
+        applyUpdateMarksToUnderstanding(store, request.session_id, nextAnswerMarks);
+        if (selectedRoute) applyQuickSampleRoute(store, session, selectedRoute);
+        if (renderedAssistantTurn && selectedRoute && nextIndex === 1) {
+          setSampleUnknownFromTurn(store, request.session_id, renderedAssistantTurn);
+        }
         setMessages(store, request.session_id, messages);
         store.setQuickSession({
           ...session,
@@ -899,13 +991,21 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
         throw new ApiClientError(404, 'NOT_FOUND', '快速问诊会话不存在', generateUUID());
       }
       if (request.action === 'accept' || request.action === 'modify') {
-        const fx = buildQuickDemoFixture(session.source_case_id);
+        const fx = session.source_kind === 'sample'
+          ? buildCurrentSampleFixture(store, session)
+          : buildQuickDemoFixture(session.source_case_id);
+        const recommended = (fx?.options ?? []).find((option: any) => option?.is_recommended);
         const messages = getMessages(store, request.session_id);
         messages.push(makeOptionReviewTurn(request.session_id, fx));
         setMessages(store, request.session_id, messages);
         store.setQuickSession({
           ...session,
           status: 'option_review',
+          quick_options: session.source_kind === 'sample' ? fx?.options ?? [] : session.quick_options,
+          recommendation:
+            session.source_kind === 'sample' && recommended
+              ? `优先采用“${recommended.title}”，另一条路线保留为可比较方案。`
+              : session.recommendation,
           updated_at: nowIso(),
         });
       }
@@ -1119,11 +1219,16 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
     'upgradeQuickSession',
     async (request: { session_id: UUID; title: string }) => {
       const session = store.getQuickSession(request.session_id);
+      if (session?.source_kind === 'sample') {
+        throw new ApiClientError(
+          409,
+          'SAMPLE_UPGRADE_UNSUPPORTED',
+          '参考案例不支持直接升级，请从正式项目入口新建项目。',
+          generateUUID(),
+        );
+      }
       const now = nowIso();
-      const projectId =
-        session?.source_kind === 'sample' && session.source_case_id
-          ? formalQuickUpgradeProjectId(session.source_case_id)
-          : generateUUID();
+      const projectId = generateUUID();
       if (session) {
         const updated: QuickSession = { ...session, status: 'upgraded', updated_at: nowIso() };
         store.setQuickSession(updated);
@@ -1133,7 +1238,7 @@ export function registerQuickSessionHandlers(registry: MockRouteRegistry, store:
         id: projectId,
         title: request.title,
         status: 'reviewing',
-        source_kind: session?.source_kind === 'sample' ? 'sample' : 'quick_upgrade',
+        source_kind: 'quick_upgrade',
         source_case_id: session?.source_case_id ?? null,
         version: 1,
         created_by: '00000000-0000-4000-8000-000000000099',

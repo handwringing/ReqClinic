@@ -74,11 +74,20 @@ export class FormalJobExecutor {
       }),
     });
 
-    this.formalMapRepo.appendAiTurnOnce(
-      project.id,
-      runtime.snapshot.nextQuestion,
-      'question',
-    );
+    if (runtime.snapshot.nextQuestion) {
+      this.formalMapRepo.appendAiTurnOnce(
+        project.id,
+        runtime.snapshot.nextQuestion,
+        'question',
+      );
+    } else {
+      this.formalMapRepo.appendAiTurnOnce(
+        project.id,
+        runtime.snapshot.guidanceState.completionReason
+          ?? '本轮关键模块已经覆盖，可以复核报告；后续仍可继续补充。',
+        'status',
+      );
+    }
 
     return {
       output: {
@@ -88,7 +97,9 @@ export class FormalJobExecutor {
         map_snapshot_id: persisted.id,
         map_snapshot_version: persisted.version,
         next_question: runtime.snapshot.nextQuestion,
-        report_ready: true,
+        elicitation_status: runtime.snapshot.guidanceState.status,
+        report_ready: runtime.snapshot.guidanceState.reportReady,
+        completion_reason: runtime.snapshot.guidanceState.completionReason,
       },
       provider: runtime.providerResult?.provider ?? 'formal-runtime-fallback',
       model: runtime.providerResult?.model ?? modelNameForFormalProvider(),

@@ -290,6 +290,15 @@ export interface FormalMapModule {
   relatedModuleIds?: string[];
 }
 
+export interface FormalGuidanceState {
+  status: 'eliciting' | 'review_ready';
+  coveredModuleCount: number;
+  totalModuleCount: number;
+  unresolvedCount: number;
+  reportReady: boolean;
+  completionReason: string | null;
+}
+
 export interface FormalMapData {
   result_type: 'formal_map_snapshot';
   title: string;
@@ -297,7 +306,8 @@ export interface FormalMapData {
   projectType: string;
   sourceContext: string;
   currentModuleId: string;
-  nextQuestion: string;
+  nextQuestion: string | null;
+  guidanceState: FormalGuidanceState;
   generationSteps: { label: string; state: 'done' | 'active' | 'pending' }[];
   modules: FormalMapModule[];
   unresolvedItems: { id: string; label: string; detail: string; impact: string }[];

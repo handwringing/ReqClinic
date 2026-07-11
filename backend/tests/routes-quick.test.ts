@@ -1261,6 +1261,33 @@ describe('quick-consult routes (Task 14, 21 operationIds)', () => {
       expect(res.body.error.code).toBe('AGREEMENT_REQUIRED');
     });
 
+    it('returns 409 when a reference case attempts to upgrade', async () => {
+      const sample = quickSessionRepo.create({
+        actorKind: 'user',
+        userId: ownerId,
+        sourceKind: 'sample',
+        sourceCaseId: 'ai-poster-website',
+        originalIdea: '参考案例不应创建正式项目',
+      });
+      createBriefVersionForSession(sample.id);
+
+      const res = await inject(
+        'POST',
+        `/api/v1/quick-sessions/${sample.id}/upgrade`,
+        {
+          body: {
+            brief_version: 1,
+            expected_quick_session_version: sample.version,
+          },
+          ...asOwner(),
+        },
+      );
+
+      expect(res.statusCode).toBe(409);
+      expect(res.body.error.code).toBe('SAMPLE_UPGRADE_UNSUPPORTED');
+      expect(upgradeRepo.findByQuickSession(sample.id)).toBeNull();
+    });
+
     it('returns 201 with project_id and upgrade_record_id on success', async () => {
       const res = await inject(
         'POST',

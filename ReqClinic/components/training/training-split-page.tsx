@@ -3,15 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProductBrandText } from '@/components/common/product-brand';
+import { ModelUnavailableDialog } from '@/components/common/model-unavailable-dialog';
 import {
   ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   GraduationCap,
+  ListChecks,
   Send,
   Sparkles,
 } from 'lucide-react';
 import { getApiClient } from '@/lib/api';
+import { useModelApiGate } from '@/lib/use-model-api-gate';
 import type {
   AiJob,
   TrainingAttempt,
@@ -25,6 +30,14 @@ import {
   Splitter,
 } from '@/components/ui';
 import { generateUUID } from '@/lib/utils/id';
+import {
+  buildTrainingSampleFeedback,
+  buildTrainingSampleSummary,
+  getTrainingSampleNextHint,
+  getTrainingSampleProfile,
+  resolveTrainingSampleTurn,
+  type TrainingSampleProfile,
+} from '@/lib/training-sample-engine';
 
 interface StructuredContent {
   paragraphs?: string[];
@@ -48,466 +61,24 @@ interface TrainingMessage {
   created_at: string;
 }
 
-const GUIDED_QUESTIONS = [
-  '这件事最想先解决的具体问题是什么？',
-  '谁会使用或确认这个结果，谁会受到影响？',
-  '如果第一版只能覆盖一个场景，最应该先覆盖哪一个？',
-  '什么结果出现时，你们会认为这件事已经做好？',
-];
 
-interface TrainingProfile {
-  focus: string;
-  questions: string[];
-}
 
-interface SampleFeedbackProfile {
-  scoreBase: number;
-  missing: string[];
-  suggestions: string[];
-  examples: TrainingFeedback['improvement_examples'];
-  dimensionNotes: Partial<Record<'目标' | '对象' | '边界' | '验收', { evidence: string; comment: string }>>;
-}
 
-const SAMPLE_ROLE_ANSWERS: Record<string, string[]> = {
-  需求访谈: [
-    '我最关心高峰时段访客排队和异常来访处理，不能只看登记是否方便。',
-    '主要使用的是门岗安保，前台会发起部分预约，运营要看记录和统计。',
-    '最常见的异常是访客忘带证件、预约信息不一致，或者临时来访没有提前登记。',
-    '如果高峰期核验更快、异常处理有记录、事后能查到责任链，我们就认为第一版有价值。',
-  ],
-  范围边界: [
-    '第一版先解决校内同学发布和联系，不想一开始就承担完整交易平台责任。',
-    '买卖双方主要通过平台看到信息，后续沟通可以先跳到微信或线下。',
-    '支付、物流、担保交易和纠纷仲裁暂时不做，最多做举报和下架。',
-    '首版能稳定发布、搜索、联系和举报，管理员能处理违规信息，就算达成。',
-  ],
-  运营指标: [
-    '我们说的转化率主要是从商品详情页到下单的转化，不包含老客复购。',
-    '希望在双十一前两周看到提升，目标是从现在的 2.8% 提到 3.5% 左右。',
-    '运营负责人确认目标，商品、投放和客服都需要配合。',
-    '统计时要排除异常流量、刷单订单和售后取消订单。',
-  ],
-  创意简报: [
-    '这组海报主要用于双十一前的拉新转化，希望突出首单优惠和套装折扣。',
-    '主要面向 20 到 28 岁的一二线城市女性用户，她们更在意成分安全、价格和上脸效果。',
-    '需要小红书封面、朋友圈长图和门店立牌三个版本。',
-    '不能使用医疗功效词，不能暗示永久效果，也不能使用未授权明星图。',
-  ],
-  学术任务: [
-    '课程要求 4000 字左右，至少 8 篇参考文献，下周五前提交。',
-    '我想聚焦大学课堂，而不是所有教育阶段。',
-    '研究问题可以是生成式智能如何改变学生写作反馈和教师评价方式。',
-    '老师允许英文文献，也可以引用政策文件和课堂案例。',
-  ],
-  服务流程: [
-    '目前主要看到期会员的续费率，最近三个月从 42% 降到 34%。',
-    '会员最常在课程结束后的回访阶段停止回应。',
-    '顾问负责回访，教练提供训练建议，店长只看最终续费数据。',
-    '第一版应该先改到期前 14 天到到期后 7 天这段流程。',
-  ],
-  外包采购: [
-    '官网主要目标是品牌展示和获取咨询线索。',
-    '首版必须有首页、服务介绍、案例、关于我们和咨询表单。',
-    '暂时不包含会员系统、在线支付、多语言和复杂后台。',
-    '验收标准是页面能上线、移动端可用、咨询表单能正常收到。',
-  ],
-  协作项目: [
-    '答辩最重要的是能跑通演示，同时说明数据边界和创新点。',
-    '一个人负责前端，一个人负责模型和数据，一个人负责文档和答辩材料。',
-    '最大的依赖是训练数据、模型接口稳定性和学校答辩设备环境。',
-    '第一版必须有演示流程、核心分析结果和答辩说明，个性化配置可以放后面。',
-  ],
-  早期想法: [
-    '最想练习的是用户不知道怎么把模糊想法说清楚的时刻。',
-    '第一批可以先面向学生和刚开始做项目的职场新人。',
-    '助手更像陪练教练，先追问，再指出表达哪里不清楚。',
-    '第一版最需要验证用户是否愿意连续练习，以及反馈是否真的能改进表达。',
-  ],
-};
 
-const TRAINING_PROFILES: Record<string, TrainingProfile> = {
-  需求访谈: {
-    focus: '访谈目标、现场角色、关键场景、异常处理和验收口径',
-    questions: [
-      '这套访客系统最想先解决门岗现场的哪个问题？',
-      '谁会实际使用系统，安保、前台、访客和运营分别要做什么？',
-      '访客到现场但预约信息异常时，现在希望怎么处理？',
-      '第一版上线后，用什么现场结果判断它确实更安全或更高效？',
-    ],
-  },
-  范围边界: {
-    focus: '首版范围、交易路径、不做事项、平台责任和验收标准',
-    questions: [
-      '第一版到底只做信息发布和联系，还是要覆盖支付、物流和担保交易？',
-      '买家看到商品后，下一步是在平台内沟通，还是跳转到微信或线下交易？',
-      '哪些事情明确不做，比如支付、物流、担保、纠纷仲裁或实名认证？',
-      '首版上线后，用什么标准判断这个小程序已经可用？',
-    ],
-  },
-  运营指标: {
-    focus: '指标口径、目标幅度、责任分工、适用场景和验收周期',
-    questions: [
-      '你们说提升转化率时，具体用哪个指标判断？',
-      '这个目标需要在什么时间范围内提升到多少？',
-      '这个目标主要由谁确认，哪些团队需要配合？',
-      '统计这个指标时，哪些流量或订单需要排除？',
-    ],
-  },
-  创意简报: {
-    focus: '目标受众、渠道规格、核心信息、素材和审核边界',
-    questions: [
-      '这次海报最核心的投放目标是什么，拉新、转化还是品牌印象？',
-      '目标受众具体是哪类人，她们最在意的卖点是什么？',
-      '投放渠道和尺寸版本有哪些硬性要求？',
-      '有哪些功效表达、素材或风格是必须避开的？',
-    ],
-  },
-  学术任务: {
-    focus: '任务要求、评分标准、研究问题、证据范围和结构计划',
-    questions: [
-      '课程对字数、格式、截止时间和引用数量有什么要求？',
-      '你准备聚焦哪个教育阶段或具体场景？',
-      '这篇论文最想回答的研究问题是什么？',
-      '老师是否允许英文文献、政策案例或实证数据？',
-    ],
-  },
-  服务流程: {
-    focus: '服务流程、关键触点、问题环节、前后台分工和指标',
-    questions: [
-      '你们现在用哪个指标判断续费流程是否改善？',
-      '会员最常在哪个触点流失或停止回应？',
-      '前台、顾问、教练和店长分别承担什么动作？',
-      '如果第一版只改一段流程，最应该先改哪里？',
-    ],
-  },
-  外包采购: {
-    focus: '工作范围、交付物、排除项、验收、里程碑和变更机制',
-    questions: [
-      '官网的主要业务目标是什么，品牌展示还是获客线索？',
-      '首版必须交付哪些栏目、功能和文件？',
-      '哪些内容明确不包含在外包范围里？',
-      '验收时用什么标准判断外包已经完成？',
-    ],
-  },
-  协作项目: {
-    focus: '共同目标、角色分工、依赖关系、数据风险和版本节点',
-    questions: [
-      '答辩时最重要的成功标准是什么，可运行演示还是研究创新？',
-      '三个人分别负责哪些模块和材料？',
-      '哪些数据、模型或设备依赖会影响进度？',
-      '哪些功能必须进第一版，哪些可以放到答辩后？',
-    ],
-  },
-  早期想法: {
-    focus: '问题假设、用户假设、使用时刻、可能方向和验证目标',
-    questions: [
-      '用户最需要练习的是哪个具体时刻，而不是泛泛的沟通？',
-      '先面向哪类人群，学生、职场新人还是长期社交焦虑者？',
-      '智能助手更像陪练对象、反馈教练，还是脚本生成器？',
-      '第一版最需要验证的是持续练习意愿、反馈有效性还是付费意愿？',
-    ],
-  },
-};
 
-const SAMPLE_FEEDBACK_PROFILES: Record<string, SampleFeedbackProfile> = {
-  需求访谈: {
-    scoreBase: 0.47,
-    missing: ['异常处理', '现场核验标准'],
-    suggestions: [
-      '继续追问高峰时段、异常来访和安保核验动作。',
-      '把“更安全”拆成可观察的核验结果，例如漏放、误拦和处理时长。',
-    ],
-    examples: [
-      {
-        before: '访客系统要怎么做？',
-        after: '在访客到门岗但预约信息异常时，安保希望先看到哪些信息、能做哪些处理？',
-        reason: '把泛泛功能追问改成现场异常场景追问。',
-      },
-      {
-        before: '要不要提高效率？',
-        after: '高峰时段一名安保每分钟需要核验多少访客，超过多久算不可接受？',
-        reason: '把效率诉求改成可判断的现场标准。',
-      },
-    ],
-    dimensionNotes: {
-      目标: { evidence: '已开始围绕安保访谈目标追问。', comment: '下一步要把安全和效率拆成具体场景。' },
-      对象: { evidence: '安保主管已经明确，但前台、访客和运营角色还可补问。', comment: '访客系统通常涉及多角色协同。' },
-      边界: { evidence: '还没充分确认异常来访、权限和人工兜底。', comment: '边界会直接影响门岗处置责任。' },
-      验收: { evidence: '还缺少通行速度、误拦漏放等验收口径。', comment: '验收要能对应现场管理结果。' },
-    },
-  },
-  范围边界: {
-    scoreBase: 0.5,
-    missing: ['交易闭环', '不做事项'],
-    suggestions: [
-      '继续追问第一版到底只做信息发布，还是包含担保、支付和纠纷处理。',
-      '把“更安全”改成具体机制，例如校内身份、举报、黑名单或线下交易提醒。',
-    ],
-    examples: [
-      {
-        before: '交易要安全吗？',
-        after: '第一版是否只负责发布和联系，支付、物流、担保和纠纷处理哪些明确不做？',
-        reason: '先划清范围，避免把平台责任无限扩大。',
-      },
-      {
-        before: '有哪些功能？',
-        after: '买家看到商品后，下一步是在平台内沟通，还是跳转到微信/线下交易？',
-        reason: '用真实交易路径倒推必要功能。',
-      },
-    ],
-    dimensionNotes: {
-      目标: { evidence: '已开始追问发布信息与交易闭环的优先级。', comment: '目标不同会决定是否需要支付和纠纷处理。' },
-      对象: { evidence: '对象是校内学生，但管理员、卖家和买家责任还可补问。', comment: '角色边界会影响规则设计。' },
-      边界: { evidence: '担保、物流、支付等不做项还需确认。', comment: '这是本案例最关键的追问方向。' },
-      验收: { evidence: '还缺少首版上线后怎么判断安全和活跃的标准。', comment: '验收可从发布量、举报率和成交路径观察。' },
-    },
-  },
-  创意简报: {
-    scoreBase: 0.56,
-    missing: ['审核红线', '渠道规格'],
-    suggestions: [
-      '继续追问投放渠道、尺寸版本、必须出现的卖点和禁用表达。',
-      '把“高级感”改成可执行的视觉约束，例如色调、素材、留白和品牌禁区。',
-    ],
-    examples: [
-      {
-        before: '你想做什么风格？',
-        after: '这组海报主要投放在哪里，必须避开哪些功效、人物或素材表达？',
-        reason: '从泛泛偏好转成渠道和审核边界追问。',
-      },
-      {
-        before: '要突出转化吗？',
-        after: '用户在几秒内必须看到哪个利益点，首单优惠、套装折扣还是成分安全？',
-        reason: '把转化目标改成画面优先级。',
-      },
-    ],
-    dimensionNotes: {
-      目标: { evidence: '已围绕转化目标开始追问。', comment: '创意 Brief 还要把目标翻译成画面优先级。' },
-      对象: { evidence: '目标受众仍需年龄、渠道和购买动机补充。', comment: '受众不清会导致风格判断失真。' },
-      边界: { evidence: '审核红线、禁用词和素材限制还没充分确认。', comment: '美妆海报尤其需要先问合规边界。' },
-      验收: { evidence: '还缺少审核通过、点击率或卖点可读性的判断标准。', comment: '验收应连接投放目标。' },
-    },
-  },
-  学术任务: {
-    scoreBase: 0.54,
-    missing: ['评分标准', '证据范围'],
-    suggestions: [
-      '继续追问课程要求、引用数量、老师偏好的论文结构和允许的数据来源。',
-      '把“大主题”收窄成一个可以在字数内回答的研究问题。',
-    ],
-    examples: [
-      {
-        before: '你想写什么方向？',
-        after: '这门课要求多少字、几篇文献、是否需要实证材料，老师更看重观点还是规范？',
-        reason: '先确认任务规则，避免选题超出课程要求。',
-      },
-      {
-        before: 'AI 对教育有什么影响？',
-        after: '你准备聚焦大学课堂中的写作反馈、教师评价，还是学生作弊治理？',
-        reason: '把大主题收敛成可论证问题。',
-      },
-    ],
-    dimensionNotes: {
-      目标: { evidence: '已开始从论文主题转向研究问题。', comment: '目标应落到课程可评分的研究问题。' },
-      对象: { evidence: '课程老师和作业要求还可补问。', comment: '学术任务的确认对象通常是评分规则。' },
-      边界: { evidence: '教育阶段、材料来源和论文字数边界还需确认。', comment: '边界决定论文是否可写完。' },
-      验收: { evidence: '还缺少评分标准、引用要求和结构标准。', comment: '验收要对应课程评分要求。' },
-    },
-  },
-  服务流程: {
-    scoreBase: 0.52,
-    missing: ['触点失效', '前后台分工'],
-    suggestions: [
-      '继续追问会员在哪个触点流失，以及顾问、教练、店长分别做什么。',
-      '把“提高续费”拆成续费率、到店率、回访完成率等可观察指标。',
-    ],
-    examples: [
-      {
-        before: '为什么会员不续费？',
-        after: '会员从到期前 14 天到到期后 7 天，在哪个提醒或回访触点最容易断掉？',
-        reason: '把原因追问放回服务流程时间线。',
-      },
-      {
-        before: '员工怎么跟进？',
-        after: '顾问、教练和店长在续费前后分别负责哪一步，哪一步现在没有记录？',
-        reason: '明确前后台分工和责任断点。',
-      },
-    ],
-    dimensionNotes: {
-      目标: { evidence: '已开始围绕续费率和流程改善追问。', comment: '还要确认主指标和辅助指标。' },
-      对象: { evidence: '会员是核心对象，顾问、教练和店长还可继续拆分。', comment: '服务流程必须覆盖前台和后台角色。' },
-      边界: { evidence: '到期前后哪些阶段纳入首版还需确认。', comment: '流程边界决定改造成本。' },
-      验收: { evidence: '还缺少续费率、回访率或投诉减少的目标值。', comment: '服务优化需要可追踪指标。' },
-    },
-  },
-  外包采购: {
-    scoreBase: 0.55,
-    missing: ['交付物清单', '变更机制'],
-    suggestions: [
-      '继续追问首版栏目、素材归属、验收标准、里程碑和变更收费方式。',
-      '把“做官网”拆成页面、内容、后台、表单、上线和维护边界。',
-    ],
-    examples: [
-      {
-        before: '官网要哪些功能？',
-        after: '首版必须交付哪些栏目、页面、文案、图片和表单，哪些明确不包含？',
-        reason: '把功能追问改成可签约的交付范围。',
-      },
-      {
-        before: '多久能做完？',
-        after: '希望按哪些里程碑验收，原型、视觉、开发、上线分别由谁确认？',
-        reason: '补上外包协作中的确认机制。',
-      },
-    ],
-    dimensionNotes: {
-      目标: { evidence: '已开始确认品牌展示或获客目标。', comment: '目标会影响栏目和转化表单设计。' },
-      对象: { evidence: '甲方、外包方和最终访客角色还可补问。', comment: '外包采购要明确确认人。' },
-      边界: { evidence: '后台、多语言、维护、素材等边界还需追问。', comment: '边界不清会导致返工和加价。' },
-      验收: { evidence: '还缺少上线、移动端、表单和交付文件的验收口径。', comment: '验收要能写进合同或需求书。' },
-    },
-  },
-  协作项目: {
-    scoreBase: 0.51,
-    missing: ['分工依赖', '答辩标准'],
-    suggestions: [
-      '继续追问三个人的分工、共同目标、数据边界和答辩版本节点。',
-      '把“做完整”改成可演示流程、创新点说明和材料交付清单。',
-    ],
-    examples: [
-      {
-        before: '你们想做哪些功能？',
-        after: '答辩时必须演示哪一条完整流程，三个人分别负责哪一段？',
-        reason: '把功能列表转成协作和答辩约束。',
-      },
-      {
-        before: '模型怎么做？',
-        after: '训练数据、模型接口和学校答辩设备有哪些风险，谁负责兜底？',
-        reason: '提前暴露关键依赖和风险责任。',
-      },
-    ],
-    dimensionNotes: {
-      目标: { evidence: '已开始追问答辩成功标准。', comment: '毕业设计目标要兼顾演示、创新和文档。' },
-      对象: { evidence: '小组成员明确，但老师和答辩评委标准还可补问。', comment: '评审对象决定取舍优先级。' },
-      边界: { evidence: '数据、模型接口和个性化功能边界还需确认。', comment: '协作项目最容易在边界上失控。' },
-      验收: { evidence: '还缺少可运行演示和答辩材料的完成口径。', comment: '验收要对应学校评分。' },
-    },
-  },
-  早期想法: {
-    scoreBase: 0.5,
-    missing: ['用户假设', '验证方式'],
-    suggestions: [
-      '继续追问具体使用时刻、第一批用户和想验证的关键假设。',
-      '不要过早问功能清单，先问用户为什么需要持续练习。',
-    ],
-    examples: [
-      {
-        before: '要做什么功能？',
-        after: '用户最需要练习的是面试、汇报、破冰聊天，还是日常消息回复？',
-        reason: '早期想法先找具体使用时刻。',
-      },
-      {
-        before: '用户会喜欢吗？',
-        after: '第一版要验证用户愿不愿意连续练习，还是验证反馈是否真的能改善表达？',
-        reason: '把主观判断改成可验证假设。',
-      },
-    ],
-    dimensionNotes: {
-      目标: { evidence: '已开始追问产品想验证的问题。', comment: '早期想法的目标不应过早写成完整功能。' },
-      对象: { evidence: '潜在用户还需要按使用时刻和痛点继续细分。', comment: '用户假设越具体，验证越有效。' },
-      边界: { evidence: '陪练、教练、脚本生成等方向边界还需确认。', comment: '方向边界决定原型形态。' },
-      验收: { evidence: '还缺少愿意持续练习、反馈有效性的验证标准。', comment: '验收应落到试用反馈。' },
-    },
-  },
-};
-
-function getTrainingProfile(trainingCase: TrainingCase): TrainingProfile {
-  return TRAINING_PROFILES[trainingCase.category] ?? {
-    focus: '目标、角色、场景、边界和验收',
-    questions: GUIDED_QUESTIONS,
-  };
-}
-
-function getSampleRoleAnswer(trainingCase: TrainingCase, questionIndex: number, question: string): string {
-  const answers = SAMPLE_ROLE_ANSWERS[trainingCase.category] ?? SAMPLE_ROLE_ANSWERS.运营指标;
-  const direct = answers[questionIndex % answers.length];
-  if (direct) return direct;
-  return `这个问题需要进一步确认。你刚才问的是“${question}”，可以继续追问目标、对象、边界或验收标准。`;
-}
-
-function buildAutoSummary(trainingCase: TrainingCase, messages: TrainingMessage[]): string {
-  const userQuestions = messages
-    .filter((message) => message.role === 'user')
-    .map((message) => message.content.trim())
-    .filter(Boolean)
-    .slice(-4);
-  if (!userQuestions.length) {
-    return `本轮围绕《${trainingCase.title}》开始练习，还需要先提出一个能让对方回答的追问。`;
-  }
-  return [
-    `本轮练习案例：${trainingCase.title}`,
-    `已追问：${userQuestions.join('；')}`,
-    '系统将根据这些追问判断目标、对象、场景、边界和验收口径的覆盖情况。',
-  ].join('\n');
-}
-
-function buildSampleFeedback(trainingCase: TrainingCase, questionCount: number): TrainingFeedback {
-  const profile = SAMPLE_FEEDBACK_PROFILES[trainingCase.category] ?? SAMPLE_FEEDBACK_PROFILES.需求访谈;
-  const covered = Math.min(0.9, profile.scoreBase + questionCount * 0.12);
-  const objectStatus = questionCount >= 2 ? 'covered' : 'partial';
-  const boundaryStatus = questionCount >= 4 ? 'covered' : 'missing';
-  const acceptanceStatus = questionCount >= 3 ? 'partial' : 'missing';
-  return {
-    coverage_score: covered,
-    missing_dimensions:
-      questionCount >= 4
-        ? ['后续变化处理']
-        : profile.missing,
-    improvement_suggestions: profile.suggestions,
-    dimension_breakdown: [
-      {
-        dimension: '目标',
-        status: questionCount >= 1 ? 'covered' : 'partial',
-        evidence:
-          questionCount >= 1
-            ? profile.dimensionNotes.目标?.evidence ?? '已开始追问目标或用途。'
-            : '还需要先确认目标。',
-        comment: profile.dimensionNotes.目标?.comment ?? '先确认为什么要做，后续范围才不会发散。',
-      },
-      {
-        dimension: '对象',
-        status: objectStatus,
-        evidence:
-          objectStatus === 'covered'
-            ? '已继续追问目标用户、确认人或协作角色。'
-            : profile.dimensionNotes.对象?.evidence ?? '对象和确认人还不够清楚。',
-        comment: profile.dimensionNotes.对象?.comment ?? '对象不同，方案和验收标准会明显不同。',
-      },
-      {
-        dimension: '边界',
-        status: boundaryStatus,
-        evidence:
-          boundaryStatus === 'covered'
-            ? '已追问限制、禁用项或范围。'
-            : profile.dimensionNotes.边界?.evidence ?? '还没有充分追问限制条件。',
-        comment: profile.dimensionNotes.边界?.comment ?? '边界决定哪些承诺不能轻易写进需求。',
-      },
-      {
-        dimension: '验收',
-        status: acceptanceStatus,
-        evidence:
-          acceptanceStatus === 'partial'
-            ? '已有完成口径线索，但还可更量化。'
-            : profile.dimensionNotes.验收?.evidence ?? '还缺少可判断完成的标准。',
-        comment: profile.dimensionNotes.验收?.comment ?? '验收标准越具体，后续沟通成本越低。',
-      },
-    ],
-    improvement_examples: profile.examples,
-  };
+function isTrainingSampleAttempt(
+  attempt: TrainingAttempt | null,
+  trainingCase: TrainingCase,
+): boolean {
+  return attempt?.source_kind === 'sample' ||
+    trainingCase.version === 'demo' ||
+    trainingCase.id.startsWith('demo-training');
 }
 
 function createInitialAssistantMessage(
   trainingCase: TrainingCase,
-  trainingProfile: TrainingProfile,
+  trainingProfile: TrainingSampleProfile,
+  isSampleAttempt: boolean,
 ): TrainingMessage {
   return {
     id: `ai-init-${generateUUID()}`,
@@ -517,9 +88,11 @@ function createInitialAssistantMessage(
     structured_content: {
       paragraphs: [
         trainingCase.description,
-        `先围绕${trainingProfile.focus}追问。下方会给出当前建议追问，可以直接填入并发送。`,
+        isSampleAttempt
+          ? `这轮重点是${trainingProfile.focus}。请从预设追问中选择一项，角色会按案例信息继续回答。`
+          : `这轮重点是${trainingProfile.focus}。可以从建议问题开始，也可以直接问你认为最关键的事。`,
       ],
-      highlights: ['当前建议追问'],
+      highlights: [isSampleAttempt ? '案例演示' : '练习重点'],
     },
     created_at: new Date().toISOString(),
   };
@@ -538,10 +111,18 @@ function normalizeBinding(input: unknown): TrainingBinding | null {
 function mapAttemptMessages(
   attempt: TrainingAttempt | null,
   trainingCase: TrainingCase,
-  trainingProfile: TrainingProfile,
+  trainingProfile: TrainingSampleProfile,
 ): TrainingMessage[] {
   const rows = attempt?.messages ?? [];
-  if (!rows.length) return [createInitialAssistantMessage(trainingCase, trainingProfile)];
+  if (!rows.length) {
+    return [
+      createInitialAssistantMessage(
+        trainingCase,
+        trainingProfile,
+        isTrainingSampleAttempt(attempt, trainingCase),
+      ),
+    ];
+  }
   return rows.map((message) => ({
     id: message.id,
     role: message.role,
@@ -707,13 +288,10 @@ export function TrainingSplitPage({
 }: TrainingSplitPageProps) {
   const router = useRouter();
   const trainingProfile = useMemo(
-    () => getTrainingProfile(trainingCase),
+    () => getTrainingSampleProfile(trainingCase),
     [trainingCase],
   );
-  const isSampleAttempt =
-    attempt.source_kind === 'sample' ||
-    trainingCase.version === 'demo' ||
-    trainingCase.id.startsWith('demo-training');
+  const isSampleAttempt = isTrainingSampleAttempt(attempt, trainingCase);
   const [messages, setMessages] = useState<TrainingMessage[]>(() =>
     mapAttemptMessages(attempt, trainingCase, trainingProfile),
   );
@@ -756,17 +334,31 @@ export function TrainingSplitPage({
     setNextHint(extractNextHintFromAttempt(attempt));
   }, [attempt, trainingCase, trainingProfile]);
 
-  // 优先使用后端返回的 coach_projection.next_hint；否则回退到本地建议追问。
-  const suggestedQuestion =
-    nextHint ?? trainingProfile.questions[questionCount % trainingProfile.questions.length];
+  const userQuestions = useMemo(
+    () => messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.content.trim())
+      .filter(Boolean),
+    [messages],
+  );
+  // 优先使用后端返回的 coach_projection.next_hint；示例则根据尚未覆盖的语义维度推荐下一问。
+  const suggestedQuestion = nextHint ?? getTrainingSampleNextHint(trainingCase, userQuestions);
+  const remainingSampleQuestions = useMemo(
+    () => trainingProfile.questions.filter((question) => !userQuestions.includes(question)),
+    [trainingProfile.questions, userQuestions],
+  );
+  const completedSampleQuestionCount = trainingProfile.questions.length - remainingSampleQuestions.length;
   const isLocked = submittingSummary || !hydrated;
   const isWaiting = isWaitingAnswer || submittingQuestion;
   const canSendQuestion = input.trim().length > 0 && !isWaiting && !isLocked;
   const autoSummary = useMemo(
-    () => buildAutoSummary(trainingCase, messages),
-    [trainingCase, messages],
+    () => buildTrainingSampleSummary(trainingCase, userQuestions),
+    [trainingCase, userQuestions],
   );
   const canSubmitSummary = summaryReady && !isWaiting && !submittingSummary;
+  const { modelDialogOpen, requireModelApi, dismissModelDialog } = useModelApiGate({
+    skip: isSampleAttempt,
+  });
 
   useEffect(() => {
     if (questionCount <= 0 || isWaiting || submittingSummary) {
@@ -784,15 +376,16 @@ export function TrainingSplitPage({
     setInput(suggestedQuestion);
   };
 
-  const handleSendQuestion = async () => {
-    const text = input.trim();
+  const handleSendQuestion = async (presetQuestion?: string) => {
+    const text = (presetQuestion ?? input).trim();
     if (!text || isWaiting || isLocked) return;
+    if (isSampleAttempt && (!presetQuestion || !trainingProfile.questions.includes(text))) return;
     if (!looksLikeTrainingQuestion(text)) {
       setFooterNotice('这句还不像一个追问。请换成一个能让对方回答的问题，例如“这个目标由谁确认？”');
       return;
     }
+    if (!(await requireModelApi())) return;
 
-    const currentQuestionIndex = questionCount;
     const userMsg: TrainingMessage = {
       id: `user-${generateUUID()}`,
       role: 'user',
@@ -823,16 +416,25 @@ export function TrainingSplitPage({
       if (isSampleAttempt) {
         await sleep(120);
         if (!mountedRef.current) return;
-        const roleAnswer = getSampleRoleAnswer(trainingCase, currentQuestionIndex, text);
+        const sampleTurn = resolveTrainingSampleTurn(trainingCase, text, userQuestions);
         const answerMsg: TrainingMessage = {
           id: `ai-${generateUUID()}`,
           role: 'assistant',
           speaker: 'role',
-          content: roleAnswer,
+          content: sampleTurn.answer,
+          structured_content: {
+            paragraphs: [sampleTurn.answer],
+            highlights: sampleTurn.dimensionLabel
+              ? [
+                  sampleTurn.dimensionLabel,
+                  `已覆盖 ${sampleTurn.coveredCount}/${sampleTurn.totalDimensions}`,
+                ]
+              : ['需要换一个追问方向'],
+          },
           created_at: new Date().toISOString(),
         };
         setMessages((prev) => prev.map((m) => (m.id === waitingId ? answerMsg : m)));
-        setNextHint(trainingProfile.questions[(currentQuestionIndex + 1) % trainingProfile.questions.length]);
+        setNextHint(sampleTurn.nextHint);
         setFooterNotice(null);
         return;
       }
@@ -913,13 +515,14 @@ export function TrainingSplitPage({
   const handleSubmitSummary = async () => {
     const text = autoSummary.trim();
     if (!text || !canSubmitSummary) return;
+    if (!(await requireModelApi())) return;
     setSubmittingSummary(true);
     try {
       if (isSampleAttempt) {
         await sleep(120);
         onSummarySubmitted(
           `sample-feedback-${attempt.attempt_id}`,
-          buildSampleFeedback(trainingCase, questionCount),
+          buildTrainingSampleFeedback(trainingCase, userQuestions),
         );
         return;
       }
@@ -934,8 +537,9 @@ export function TrainingSplitPage({
   };
 
   return (
+    <>
     <div
-      className="training-split-shell"
+      className="training-split-shell page-motion-shell"
       style={{
         position: 'relative',
         height: '100vh',
@@ -972,7 +576,7 @@ export function TrainingSplitPage({
         <div className="meta" style={{ gap: 8 }}>
           {isSampleAttempt && (
             <span className="app-chip app-chip-muted">
-              参考练习
+              案例演示
             </span>
           )}
         </div>
@@ -1004,11 +608,11 @@ export function TrainingSplitPage({
       </div>
 
       <div
-        className="training-split-main flex min-h-0 flex-1"
+        className="training-split-main page-motion-stage flex min-h-0 flex-1"
         style={{ minHeight: 0, overflow: 'hidden' }}
       >
         <section
-          className={`training-split-pane training-split-dialogue flex min-w-0 flex-col ${
+          className={`training-split-pane training-split-dialogue page-motion-panel--left flex min-w-0 flex-col ${
             activeTab !== 'dialogue' ? 'training-split-pane--mobile-hidden' : ''
           }`}
           style={{ width: `${pct}%`, minHeight: 0 }}
@@ -1021,7 +625,7 @@ export function TrainingSplitPage({
               </Avatar>
               <div className="min-w-0 flex-1">
                 <div className="app-label" style={{ marginBottom: 2 }}>
-                  <span>{isSampleAttempt ? '参考练习 · 角色回应' : '追问练习 · 角色回应'}</span>
+                  <span>{isSampleAttempt ? '案例演示 · 角色回应' : '追问练习 · 角色回应'}</span>
                 </div>
                 <div
                   className="app-title app-title-sm"
@@ -1083,64 +687,106 @@ export function TrainingSplitPage({
                 {footerNotice}
               </div>
             )}
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="app-chip app-chip-sage"
-                onClick={fillSuggestedQuestion}
-                disabled={isLocked || isWaiting}
-                aria-busy={isWaiting || undefined}
-              >
-                填入追问
-              </button>
-              <span className="text-[11px]" style={{ color: 'var(--aurora-muted)' }}>
-                当前建议：{suggestedQuestion}
-              </span>
-            </div>
+            {isSampleAttempt ? (
+              <div className="training-sample-composer" aria-label="案例预设追问">
+                <div className="training-sample-composer__head">
+                  <span>
+                    <ListChecks size={14} strokeWidth={1.5} aria-hidden="true" />
+                    选择下一条追问
+                  </span>
+                  <small>
+                    {completedSampleQuestionCount} / {trainingProfile.questions.length}
+                  </small>
+                </div>
+                {remainingSampleQuestions.length > 0 ? (
+                  <div className="training-sample-question-list">
+                    {remainingSampleQuestions.slice(0, 3).map((question) => (
+                      <button
+                        key={question}
+                        type="button"
+                        className="training-sample-question"
+                        disabled={isLocked || isWaiting}
+                        onClick={() => void handleSendQuestion(question)}
+                        aria-busy={isWaiting || undefined}
+                      >
+                        <span>{question}</span>
+                        <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="training-sample-composer__complete" role="status">
+                    <CheckCircle2 size={15} strokeWidth={1.5} aria-hidden="true" />
+                    预设追问已完成，可以查看本轮反馈。
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="app-chip app-chip-sage"
+                    onClick={fillSuggestedQuestion}
+                    disabled={isLocked || isWaiting}
+                    aria-busy={isWaiting || undefined}
+                  >
+                    填入追问
+                  </button>
+                  <span
+                    key={`${questionCount}-${suggestedQuestion}`}
+                    className="page-motion-question text-[11px]"
+                    style={{ color: 'var(--aurora-muted)' }}
+                  >
+                    可以继续问：{suggestedQuestion}
+                  </span>
+                </div>
 
-            <div className="inline-composer-field" style={{ minHeight: 82 }}>
-              <textarea
-                value={input}
-                onChange={(event) => {
-                  setInput(event.target.value);
-                  if (footerNotice) setFooterNotice(null);
-                }}
-                placeholder="围绕当前建议追问；不确定时先填入追问。"
-                disabled={isLocked}
-                rows={2}
-                className="app-textarea inline-composer-textarea"
-                style={{ minHeight: 60, maxHeight: 160 }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                    event.preventDefault();
-                    void handleSendQuestion();
-                  }
-                }}
-                aria-label="追问输入框"
-              />
-            </div>
+                <div className="inline-composer-field" style={{ minHeight: 82 }}>
+                  <textarea
+                    value={input}
+                    onChange={(event) => {
+                      setInput(event.target.value);
+                      if (footerNotice) setFooterNotice(null);
+                    }}
+                    placeholder="直接输入你的追问；拿不准时可以使用上方建议。"
+                    disabled={isLocked}
+                    rows={2}
+                    className="app-textarea inline-composer-textarea"
+                    style={{ minHeight: 60, maxHeight: 160 }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault();
+                        void handleSendQuestion();
+                      }
+                    }}
+                    aria-label="追问输入框"
+                  />
+                </div>
 
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <span
-                style={{
-                  fontSize: 11,
-                  color: 'var(--aurora-muted)',
-                }}
-              >
-                角色只回答已经问到的信息。
-              </span>
-              <button
-                type="button"
-                className="app-btn-primary"
-                disabled={!canSendQuestion}
-                onClick={() => void handleSendQuestion()}
-                aria-busy={isWaiting || undefined}
-                style={{ padding: '8px 14px', fontSize: 13 }}
-              >
-                <Send className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
-                {isWaiting ? '发送中…' : '发送'}
-              </button>
-            </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--aurora-muted)',
+                    }}
+                  >
+                    角色只回答已经问到的信息。
+                  </span>
+                  <button
+                    type="button"
+                    className="app-btn-primary"
+                    disabled={!canSendQuestion}
+                    onClick={() => void handleSendQuestion()}
+                    aria-busy={isWaiting || undefined}
+                    style={{ padding: '8px 14px', fontSize: 13 }}
+                  >
+                    <Send className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                    {isWaiting ? '发送中…' : '发送'}
+                  </button>
+                </div>
+              </>
+            )}
             <button
               type="button"
               className="app-btn-primary training-mobile-feedback-action"
@@ -1166,7 +812,7 @@ export function TrainingSplitPage({
         />
 
         <aside
-          className={`training-split-pane training-split-panel flex min-w-0 flex-col ${
+          className={`training-split-pane training-split-panel page-motion-panel--right flex min-w-0 flex-col ${
             activeTab !== 'panel' ? 'training-split-pane--mobile-hidden' : ''
           }`}
           style={{ flex: 1, minHeight: 0, background: 'transparent' }}
@@ -1183,7 +829,7 @@ export function TrainingSplitPage({
               style={{ color: 'var(--aurora-gold)' }}
             />
             <span className="app-title app-title-sm">
-              {isSampleAttempt ? '参考练习与总结' : '练习与总结'}
+              {isSampleAttempt ? '案例演示与总结' : '练习与总结'}
             </span>
           </header>
 
@@ -1253,9 +899,7 @@ export function TrainingSplitPage({
                           color: 'var(--aurora-muted)',
                         }}
                       >
-                        {trainingCase.version === 'demo'
-                          ? '参考案例'
-                          : `第 ${trainingCase.version} 版`}
+                        {isSampleAttempt ? '演示案例' : `第 ${trainingCase.version} 版`}
                       </span>
                     </div>
                   </div>
@@ -1273,7 +917,9 @@ export function TrainingSplitPage({
                     lineHeight: 1.7,
                   }}
                 >
-                  先用追问确认目标口径，再覆盖角色、场景和验收。你只需要按当前建议一步步练习。
+                  {isSampleAttempt
+                    ? '从预设追问中选择下一步。不同选择顺序会形成不同的信息覆盖和反馈。'
+                    : '可以从任何关键问题开始。对方只披露你真正问到的信息，反馈按实际覆盖生成。'}
                 </p>
               </section>
 
@@ -1282,7 +928,8 @@ export function TrainingSplitPage({
                   已追问
                 </div>
                 <div
-                  className="app-title app-title-lg"
+                  key={`question-count-${questionCount}`}
+                  className="app-title app-title-lg page-motion-question"
                   style={{ fontFamily: 'var(--font-mono)' }}
                   aria-label={`已追问 ${questionCount} 次`}
                 >
@@ -1314,7 +961,8 @@ export function TrainingSplitPage({
                   </span>
                 </div>
                 <div
-                  className="app-card app-card-pad"
+                  key={`${questionCount}-${autoSummary}`}
+                  className="app-card app-card-pad page-motion-stage"
                   style={{
                     minHeight: 150,
                     background: 'rgba(255,255,255,0.34)',
@@ -1366,6 +1014,13 @@ export function TrainingSplitPage({
         </aside>
       </div>
     </div>
+      <ModelUnavailableDialog
+        open={modelDialogOpen}
+        title="暂时不能继续训练"
+        description="当前模型服务不可用，暂时不能生成新的角色回答或练习反馈。你已输入的内容会保留，服务恢复后可以直接重试。"
+        onDismiss={dismissModelDialog}
+      />
+    </>
   );
 }
 

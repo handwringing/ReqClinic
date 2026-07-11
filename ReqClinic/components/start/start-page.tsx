@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ProductBrandText } from '@/components/common/product-brand';
 import { PRODUCT_BRAND } from '@/lib/product-language';
 import { DynamicBackground } from './dynamic-background';
@@ -11,6 +13,19 @@ import { ExampleCards } from './example-cards';
  * 正式项目和表达训练直接进入各自首个可操作页面。
  */
 export function StartPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const warmPrimaryRoutes = () => {
+      router.prefetch('/quick');
+      router.prefetch('/formal/new');
+      router.prefetch('/training/cases');
+    };
+
+    const timerId = globalThis.setTimeout(warmPrimaryRoutes, 200);
+    return () => globalThis.clearTimeout(timerId);
+  }, [router]);
+
   return (
     <div className="start-aurora">
       <DynamicBackground />

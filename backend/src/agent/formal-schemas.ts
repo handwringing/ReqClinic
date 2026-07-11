@@ -94,6 +94,15 @@ export const formalMapModuleSchema = z.object({
   relatedModuleIds: z.array(z.string()).default([]),
 });
 
+export const formalGuidanceStateSchema = z.object({
+  status: z.enum(['eliciting', 'review_ready']),
+  coveredModuleCount: z.number().int().nonnegative(),
+  totalModuleCount: z.number().int().positive(),
+  unresolvedCount: z.number().int().nonnegative(),
+  reportReady: z.boolean(),
+  completionReason: z.string().nullable(),
+});
+
 export const formalMapSnapshotSchema = z.object({
   result_type: z.literal('formal_map_snapshot').default('formal_map_snapshot'),
   title: z.string(),
@@ -101,7 +110,15 @@ export const formalMapSnapshotSchema = z.object({
   projectType: z.string(),
   sourceContext: z.string(),
   currentModuleId: z.string(),
-  nextQuestion: z.string(),
+  nextQuestion: z.string().nullable(),
+  guidanceState: formalGuidanceStateSchema.default({
+    status: 'eliciting',
+    coveredModuleCount: 0,
+    totalModuleCount: 1,
+    unresolvedCount: 1,
+    reportReady: false,
+    completionReason: null,
+  }),
   generationSteps: z.array(
     z.object({
       label: z.string(),

@@ -1,13 +1,14 @@
 'use client';
 
-import { ArrowLeft, FileText, PlayCircle, SendHorizontal, Sparkles, Users } from 'lucide-react';
+import { ArrowLeft, FileText, GitBranch, PlayCircle, SendHorizontal, Sparkles, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ProductBrandText } from '@/components/common/product-brand';
 import { AppBackground } from '@/components/layout/app-background';
 import { getApiClient } from '@/lib/api';
-import { hasModelApiAccess, looksLikeRequirementInput, REQUIREMENT_INPUT_HINT } from '@/lib/intake-guards';
+import { hasModelApiAccess, looksLikeRequirementInput, REQUIREMENT_INPUT_HINT, warmModelApiAccess } from '@/lib/intake-guards';
 import { PRODUCT_TERMS } from '@/lib/product-language';
+import { formalStaticProjectId } from '@/lib/static-demo-ids';
 
 const FORMAL_DEMO_CASES = [
   {
@@ -15,6 +16,9 @@ const FORMAL_DEMO_CASES = [
     label: '园区访客通行',
     title: '园区访客预约与通行',
     badge: '参考案例',
+    domain: '现场服务 · 安全合规',
+    domainClass: 'app-chip-sage',
+    branchHint: '高峰通行 / 授权边界 / 审计追踪',
     description:
       '园区希望替代纸质访客登记。访客提前预约后，到现场用凭证码扫码通行；安保需要能核验、处理异常并留下记录。项目计划在下个月峰会前上线第一版。',
     roles: '园区运营负责人：确认目标与上线范围；安保主管：确认现场流程；前台行政：提供访客登记材料',
@@ -26,6 +30,9 @@ const FORMAL_DEMO_CASES = [
     label: '企业官网外包',
     title: '企业官网外包采购',
     badge: '参考案例',
+    domain: '采购交付 · 合同验收',
+    domainClass: 'app-chip',
+    branchHint: '线索转化 / 品牌内容 / 按期上线',
     description:
       '公司计划找外包团队重做企业官网。官网需要展示产品、案例、公司介绍并收集客户线索；希望在签约前把工作范围、交付物、验收标准和排除项说清楚，减少返工和报价争议。',
     roles: '市场负责人：确认品牌与内容；销售负责人：确认线索表单；外包项目经理：确认交付计划；法务：确认合同边界',
@@ -37,6 +44,9 @@ const FORMAL_DEMO_CASES = [
     label: '多人毕业设计',
     title: '智能面试助手毕业设计',
     badge: '参考案例',
+    domain: '学生项目 · AI 答辩',
+    domainClass: 'app-chip-rose',
+    branchHint: '演示稳定 / 评分证据 / 创新展示',
     description:
       '三人小组要做一个智能面试助手毕业设计，目标是在答辩时展示可运行系统。第一版需要覆盖模拟面试、回答记录、评分反馈和答辩说明，但不能采集真实面试数据。',
     roles: '组长：范围和答辩材料；前端同学：交互与页面；后端同学：接口与数据库；算法同学：模型调用与评分提示词；指导老师：关键节点确认',
@@ -58,6 +68,15 @@ export function FormalNewPage() {
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const demoPanelRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    warmModelApiAccess();
+  }, []);
+
+  const warmDemoProject = (demoId: string) => {
+    getApiClient();
+    router.prefetch(`/formal/${formalStaticProjectId(demoId)}?source=sample`);
+  };
+
   const generatedTitle = useMemo(() => {
     const text = description.trim();
     if (!text) return '待命名项目';
@@ -67,10 +86,6 @@ export function FormalNewPage() {
   const createProject = async () => {
     const cleanDescription = description.trim();
     if (submitting) return;
-    if (!cleanDescription) {
-      setErrorText('先写一段项目描述，说明要做什么和第一版交付给谁。');
-      return;
-    }
     setSubmitting(true);
     setErrorText('');
     let keepSubmitting = false;
@@ -78,6 +93,10 @@ export function FormalNewPage() {
       const modelReady = await hasModelApiAccess();
       if (!modelReady) {
         setModelDialogOpen(true);
+        return;
+      }
+      if (!cleanDescription) {
+        setErrorText('先写一段项目描述，说明要做什么和第一版交付给谁。');
         return;
       }
       if (!looksLikeRequirementInput(cleanDescription)) {
@@ -118,6 +137,7 @@ export function FormalNewPage() {
     if (launchingDemoId !== null) return;
     setLaunchingDemoId(demo.id);
     setErrorText('');
+    warmDemoProject(demo.id);
     try {
       const accepted = await getApiClient().createProject({
         title: demo.title,
@@ -147,7 +167,7 @@ export function FormalNewPage() {
   };
 
   return (
-    <div className="formal-entry-page" style={{ position: 'relative', minHeight: '100vh' }}>
+    <div className="formal-entry-page page-motion-shell" style={{ position: 'relative', minHeight: '100vh' }}>
       <AppBackground />
       <header className="app-topbar">
         <div className="brand-mark" style={{ gap: 12 }}>
@@ -176,9 +196,9 @@ export function FormalNewPage() {
         <div aria-hidden="true" />
       </header>
 
-      <main className="app-content app-mode-stage">
+      <main className="app-content app-mode-stage page-motion-stage">
         <div className="formal-entry-layout">
-        <section className="app-mode-dialog formal-entry-form" aria-label="项目起点输入">
+        <section className="app-mode-dialog formal-entry-form page-motion-panel--left" aria-label="项目起点输入">
           <div className="app-mode-dialog-head">
             <div className="app-label" style={{ justifyContent: 'center', marginBottom: 12 }}>
               <FileText className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
@@ -312,7 +332,7 @@ export function FormalNewPage() {
           </div>
         </section>
 
-        <section ref={demoPanelRef} className="formal-demo-panel" aria-label="正式项目参考案例">
+        <section ref={demoPanelRef} className="formal-demo-panel page-motion-panel--right" aria-label="正式项目参考案例">
           <div>
             <div className="app-label" style={{ marginBottom: 10 }}>
               <Sparkles className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
@@ -324,7 +344,7 @@ export function FormalNewPage() {
             </p>
           </div>
 
-          <div className="formal-demo-list">
+          <div className="formal-demo-list page-motion-list">
             {FORMAL_DEMO_CASES.map((demo) => {
               const isBusy = launchingDemoId === demo.id;
               return (
@@ -332,16 +352,23 @@ export function FormalNewPage() {
                   key={demo.id}
                   type="button"
                   className="app-card app-card-pad formal-demo-card"
+                  onPointerEnter={() => warmDemoProject(demo.id)}
+                  onPointerDown={() => warmDemoProject(demo.id)}
+                  onFocus={() => warmDemoProject(demo.id)}
                   disabled={launchingDemoId !== null}
                   onClick={() => void startDemoProject(demo)}
                 >
                   <div>
                     <div className="app-token-row" style={{ marginBottom: 12 }}>
                       <span className="app-chip app-chip-muted">{demo.badge}</span>
-                      <span className="app-chip">{demo.label}</span>
+                      <span className={`app-chip ${demo.domainClass}`}>{demo.domain}</span>
                     </div>
                     <h3 className="app-title app-title-sm">{demo.title}</h3>
                     <p>{demo.description}</p>
+                    <div className="formal-demo-card__branch">
+                      <GitBranch className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+                      <span>可从不同方向展开：{demo.branchHint}</span>
+                    </div>
                   </div>
                   <span className="formal-demo-card__action">
                     <PlayCircle className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />

@@ -10,6 +10,7 @@ import { DynamicBackground } from './dynamic-background';
 import { PromptBar } from './prompt-bar';
 import { quickDemoSelections, type QuickDemoSelection } from '@/lib/quick-demo-cases';
 import { getApiClient } from '@/lib/api';
+import { quickStaticSessionId } from '@/lib/static-demo-ids';
 
 const QUICK_CASES = quickDemoSelections();
 
@@ -17,10 +18,19 @@ export function QuickModePage() {
   const router = useRouter();
   const [launchingCaseId, setLaunchingCaseId] = useState<string | null>(null);
 
+  const warmDemoCase = useCallback(
+    (item: QuickDemoSelection) => {
+      getApiClient();
+      router.prefetch(`/quick/${quickStaticSessionId(item.sourceCaseId)}`);
+    },
+    [router],
+  );
+
   const startDemoCase = useCallback(
     async (item: QuickDemoSelection) => {
       if (launchingCaseId) return;
       setLaunchingCaseId(item.sourceCaseId);
+      warmDemoCase(item);
       try {
         const session = await getApiClient().createQuickSession({
           source_kind: 'sample',
@@ -32,7 +42,7 @@ export function QuickModePage() {
         setLaunchingCaseId(null);
       }
     },
-    [launchingCaseId, router],
+    [launchingCaseId, router, warmDemoCase],
   );
 
   return (
@@ -71,6 +81,7 @@ export function QuickModePage() {
           <QuickCaseGrid
             launchingCaseId={launchingCaseId}
             onStartDemo={startDemoCase}
+            onWarmDemo={warmDemoCase}
           />
         </div>
       </div>
@@ -81,9 +92,11 @@ export function QuickModePage() {
 function QuickCaseGrid({
   launchingCaseId,
   onStartDemo,
+  onWarmDemo,
 }: {
   launchingCaseId: string | null;
   onStartDemo: (item: QuickDemoSelection) => void;
+  onWarmDemo: (item: QuickDemoSelection) => void;
 }) {
   return (
     <div className="mode-case-grid mode-case-grid-outside" aria-label="快速问诊示例体验">
@@ -92,6 +105,9 @@ function QuickCaseGrid({
           key={item.sourceCaseId}
           type="button"
           className="mode-case-card mode-case-card-compact"
+          onPointerEnter={() => onWarmDemo(item)}
+          onPointerDown={() => onWarmDemo(item)}
+          onFocus={() => onWarmDemo(item)}
           onClick={() => onStartDemo(item)}
           disabled={launchingCaseId !== null}
         >

@@ -242,7 +242,7 @@ function QuickConsultPageInner({ sessionId }: QuickConsultPageProps) {
   }, [activeJobId, loadAll, session?.source_kind]);
 
   return (
-    <div className="quick-consult-shell">
+    <div className="quick-consult-shell page-motion-shell">
       <AppBackground />
       <QuickTopbar
         sessionTitle={sessionTitle}
@@ -266,9 +266,9 @@ function QuickConsultPageInner({ sessionId }: QuickConsultPageProps) {
           整理
         </button>
       </div>
-      <div className="quick-consult-main">
+      <div className="quick-consult-main page-motion-stage">
         <div
-          className={`quick-consult-pane quick-consult-pane--dialogue ${
+          className={`quick-consult-pane quick-consult-pane--dialogue page-motion-panel--left ${
             mobilePanel !== 'dialogue' ? 'quick-consult-pane--mobile-hidden' : ''
           }`}
           style={{ width: `${leftPct}%` }}
@@ -295,7 +295,7 @@ function QuickConsultPageInner({ sessionId }: QuickConsultPageProps) {
           onChange={setLeftPct}
         />
         <div
-          className={`quick-consult-pane quick-consult-pane--visual ${
+          className={`quick-consult-pane quick-consult-pane--visual page-motion-panel--right ${
             mobilePanel !== 'visual' ? 'quick-consult-pane--mobile-hidden' : ''
           }`}
           style={{ width: `${100 - leftPct}%` }}

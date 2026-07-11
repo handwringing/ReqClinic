@@ -1,18 +1,22 @@
 'use client';
 
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import {
+  ArrowLeft,
+  Check,
   CheckCircle2,
   CircleDashed,
   Clock3,
+  Copy,
   Download,
   FileText,
   GitBranch,
   Layers3,
   Link2,
+  ListChecks,
   Sparkles,
   Target,
-  X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { AppBackground } from '@/components/layout/app-background';
@@ -21,6 +25,12 @@ import { MarkdownBriefContent } from '@/components/brief/brief-views';
 import { ApiClientError } from '@/lib/api/errors';
 import { getApiClient } from '@/lib/api';
 import { getQuickDemoCase } from '@/lib/quick-demo-cases';
+import {
+  getFormalDemoBranchScenario,
+  type FormalDemoBranchChoice,
+  type FormalDemoBranchScenario,
+  type FormalDemoBranchStep,
+} from '@/lib/formal-demo-branches';
 import {
   FORMAL_CUSTOM_PROJECT_ID,
   FORMAL_STATIC_CASE_IDS,
@@ -52,8 +62,77 @@ interface PageData {
 }
 
 type ExternalBinding = FormalBinding & { nonce: number };
-type FormalReportTab = 'overview' | 'detail' | 'export';
+type FormalReportTab = 'overview' | 'detail';
 type FormalMobilePanel = 'current' | 'map' | 'report';
+type FormalReportActionStatus = 'idle' | 'copied' | 'copy-error';
+
+interface FormalDemoBranchRouteEntry {
+  stepId: string;
+  moduleId: string;
+  choiceId: string;
+  choiceTitle: string;
+  routeLabel: string;
+  consequence: string;
+  impactModuleIds: string[];
+}
+
+function formalBranchStepTotal(scenario: FormalDemoBranchScenario): number {
+  const depth = (stepId: string, visited: Set<string>): number => {
+    if (visited.has(stepId)) return 0;
+    const step = scenario.steps[stepId];
+    if (!step) return 0;
+    const nextVisited = new Set(visited).add(stepId);
+    const nextDepth = Math.max(
+      0,
+      ...step.choices.map((choice) => (
+        choice.nextStepId ? depth(choice.nextStepId, nextVisited) : 0
+      )),
+    );
+    return 1 + nextDepth;
+  };
+  return Math.max(1, depth(scenario.startStepId, new Set()));
+}
+
+async function copyReportText(content: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(content);
+      return true;
+    } catch {
+      // Fall through to the browser-compatible selection fallback.
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = content;
+  textarea.readOnly = true;
+  textarea.style.position = 'fixed';
+  textarea.style.inset = '0 auto auto 0';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return copied;
+}
+
+function downloadReportMarkdown(title: string, content: string): void {
+  const safeTitle = title
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .slice(0, 80) || '正式项目';
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${safeTitle}-需求报告.md`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
 
 const POSTER_CASE = getQuickDemoCase('ai-poster-website');
 type FormalTheme = 'service' | 'outsourcing' | 'collaboration' | 'academic' | 'activity' | 'generic';
@@ -660,10 +739,14 @@ export function FormalAnalysisPage({ projectId, routeSource }: FormalAnalysisPag
 
   if (data.loading) {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <div className="page-motion-shell" style={{ position: 'relative', minHeight: '100vh' }}>
         <AppBackground />
         <div className="app-content app-state-box" style={{ minHeight: '100vh' }}>
-          <span className="desc">正在加载项目...</span>
+          <LongWaitProgress
+            title="正在打开正式项目"
+            description="正在读取项目说明、需求地图和待确认问题。"
+            steps={['读取项目', '恢复地图', '准备追问']}
+          />
         </div>
       </div>
     );
@@ -671,7 +754,7 @@ export function FormalAnalysisPage({ projectId, routeSource }: FormalAnalysisPag
 
   if (data.error || !data.project) {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <div className="page-motion-shell" style={{ position: 'relative', minHeight: '100vh' }}>
         <AppBackground />
         <div className="app-content app-state-box" style={{ minHeight: '100vh' }}>
           <div className="title" style={{ color: 'var(--aurora-rose)' }}>项目加载失败</div>
@@ -755,13 +838,26 @@ function FormalMapShell({
   bindingNotice?: string | null;
   onRefresh: () => void;
   onAddBinding: (binding: FormalBinding) => void;
-  onBindingRejected: (message: string) => void;
+  onBindingRejected: (message: string | null) => void;
 }) {
-  const canvas = useMemo(
-    () => formalMap?.snapshot?.data ? canvasFromSnapshot(formalMap.snapshot.data) : getFormalCanvas(project.title),
-    [formalMap?.snapshot?.data, project.title],
+  const branchScenario = useMemo(
+    () => getFormalDemoBranchScenario(project.source_case_id ?? staticFormalProjectSourceCase(project.id)),
+    [project.id, project.source_case_id],
   );
-  const [activeModuleId, setActiveModuleId] = useState(canvas.currentModuleId);
+  const canvas = useMemo(
+    () => branchScenario
+      ? getFormalCanvas(project.title)
+      : formalMap?.snapshot?.data
+        ? canvasFromSnapshot(formalMap.snapshot.data)
+        : getFormalCanvas(project.title),
+    [branchScenario, formalMap?.snapshot?.data, project.title],
+  );
+  const branchStartModuleId = branchScenario
+    ? branchScenario.steps[branchScenario.startStepId]?.moduleId
+    : null;
+  const [activeModuleId, setActiveModuleId] = useState(
+    branchStartModuleId ?? canvas.currentModuleId,
+  );
   const demoModules = useMemo(() => {
     const currentIndex = Math.max(0, canvas.modules.findIndex((module) => module.id === canvas.currentModuleId));
     const ordered = [
@@ -771,15 +867,28 @@ function FormalMapShell({
     return ordered.slice(0, Math.min(3, ordered.length));
   }, [canvas.currentModuleId, canvas.modules]);
 
+  const [branchStepId, setBranchStepId] = useState<string | null>(
+    branchScenario?.startStepId ?? null,
+  );
+  const [selectedBranchChoiceId, setSelectedBranchChoiceId] = useState<string | null>(null);
+  const [branchRoute, setBranchRoute] = useState<FormalDemoBranchRouteEntry[]>([]);
+  const [reportRequestNonce, setReportRequestNonce] = useState(0);
+
   useEffect(() => {
-    setActiveModuleId(canvas.currentModuleId);
+    setActiveModuleId(branchStartModuleId ?? canvas.currentModuleId);
     onDemoStepIndexChange(0);
-  }, [canvas.currentModuleId]);
+    setBranchStepId(branchScenario?.startStepId ?? null);
+    setSelectedBranchChoiceId(null);
+    setBranchRoute([]);
+  }, [branchScenario, branchStartModuleId, canvas.currentModuleId, onDemoStepIndexChange]);
 
   const activeModule =
     canvas.modules.find((module) => module.id === activeModuleId) ??
     canvas.modules.find((module) => module.id === canvas.currentModuleId) ??
     canvas.modules[0];
+  const currentBranchStep = branchStepId ? branchScenario?.steps[branchStepId] ?? null : null;
+  const selectedBranchChoice =
+    currentBranchStep?.choices.find((choice) => choice.id === selectedBranchChoiceId) ?? null;
 
   const memberInitials = members.map((m) => m.initials);
   const ownerInitials = members
@@ -793,37 +902,106 @@ function FormalMapShell({
     (sum, module) => sum + module.questions.length,
     0,
   );
-  const hasUserMessage = formalMap?.messages.some((message) => message.role === 'user') ?? false;
+  const hasUserMessage = branchScenario
+    ? false
+    : formalMap?.messages.some((message) => message.role === 'user') ?? false;
   const sourceKind = project.source_kind ?? routeSourceKind;
   const isSampleProject = sourceKind === 'sample';
   const isGuidedDemoProject = sourceKind === 'sample' || sourceKind === 'quick_upgrade';
-  const demoFlowComplete = isGuidedDemoProject && demoStepIndex >= demoModules.length;
+  const isBranchingDemo = isGuidedDemoProject && branchScenario !== null;
+  const branchingFlowComplete = isBranchingDemo && branchStepId === null && branchRoute.length > 0;
+  const demoFlowComplete = isGuidedDemoProject && (
+    isBranchingDemo ? branchingFlowComplete : demoStepIndex >= demoModules.length
+  );
+  const demoStepTotal = branchScenario
+    ? formalBranchStepTotal(branchScenario)
+    : Math.max(1, demoModules.length);
+  const linearDemoTargetModule =
+    demoModules[Math.min(demoStepIndex, Math.max(0, demoModules.length - 1))] ?? activeModule;
   const demoTargetModule =
-    isGuidedDemoProject
-      ? demoModules[Math.min(demoStepIndex, Math.max(0, demoModules.length - 1))] ?? activeModule
-      : activeModule;
-  const displayModule = isGuidedDemoProject ? demoTargetModule : activeModule;
+    isBranchingDemo
+      ? currentBranchStep
+        ? canvas.modules.find((module) => module.id === currentBranchStep.moduleId) ?? activeModule
+        : activeModule
+      : linearDemoTargetModule;
+  const panelModule = isGuidedDemoProject ? demoTargetModule : activeModule;
+  const workspaceModule = isBranchingDemo ? activeModule : panelModule;
   const requiredBindingId =
-    isGuidedDemoProject && !demoFlowComplete ? moduleToBinding(displayModule).id : undefined;
+    isGuidedDemoProject && !demoFlowComplete ? moduleToBinding(panelModule).id : undefined;
   const addBindingWithDemoRules = (binding: FormalBinding) => {
     if (demoFlowComplete) {
       onBindingRejected('本轮确认已完成，可以查看报告或返回入口。');
       return;
     }
     if (isGuidedDemoProject && requiredBindingId && binding.id !== requiredBindingId) {
-      onBindingRejected(`这一步请先加入「${displayModule.title}」节点。`);
+      onBindingRejected(
+        isBranchingDemo
+          ? `可以浏览其他节点；要提交当前判断，请回到「${panelModule.title}」。`
+          : `这一步请先加入「${panelModule.title}」节点。`,
+      );
       return;
     }
     onAddBinding(binding);
   };
   const selectModuleWithDemoRules = (moduleId: string) => {
-    if (isGuidedDemoProject && !demoFlowComplete && moduleId !== displayModule.id) {
-      onBindingRejected(`这一步先处理「${displayModule.title}」，其他节点稍后再看。`);
+    if (isBranchingDemo) {
+      setActiveModuleId(moduleId);
+      return;
+    }
+    if (isGuidedDemoProject && !demoFlowComplete && moduleId !== panelModule.id) {
+      onBindingRejected(`这一步先处理「${panelModule.title}」，其他节点稍后再看。`);
       return;
     }
     setActiveModuleId(moduleId);
   };
+  const selectDemoBranchChoice = (choiceId: string) => {
+    if (!currentBranchStep) return;
+    const choice = currentBranchStep.choices.find((item) => item.id === choiceId);
+    if (!choice) return;
+    setSelectedBranchChoiceId(choice.id);
+    const targetModule = canvas.modules.find((module) => module.id === currentBranchStep.moduleId);
+    if (targetModule) {
+      setActiveModuleId(targetModule.id);
+      onAddBinding(moduleToBinding(targetModule));
+    }
+    onBindingRejected(null);
+  };
   const completeDemoStep = () => {
+    if (isBranchingDemo && branchScenario && currentBranchStep) {
+      if (!selectedBranchChoice) {
+        onBindingRejected('先选择一个处理方向，再确认这次判断。');
+        return;
+      }
+      onBindingRejected(null);
+      const nextIndex = demoStepIndex + 1;
+      const nextRouteEntry: FormalDemoBranchRouteEntry = {
+        stepId: currentBranchStep.id,
+        moduleId: currentBranchStep.moduleId,
+        choiceId: selectedBranchChoice.id,
+        choiceTitle: selectedBranchChoice.title,
+        routeLabel: selectedBranchChoice.routeLabel,
+        consequence: selectedBranchChoice.consequence,
+        impactModuleIds: selectedBranchChoice.impactModuleIds,
+      };
+      setBranchRoute((current) => [...current, nextRouteEntry]);
+      onDemoStepIndexChange(nextIndex);
+
+      if (selectedBranchChoice.nextStepId) {
+        const nextStep = branchScenario.steps[selectedBranchChoice.nextStepId];
+        setBranchStepId(selectedBranchChoice.nextStepId);
+        setSelectedBranchChoiceId(null);
+        const nextModule = nextStep
+          ? canvas.modules.find((module) => module.id === nextStep.moduleId)
+          : undefined;
+        if (nextModule) setActiveModuleId(nextModule.id);
+        return;
+      }
+
+      setBranchStepId(null);
+      setSelectedBranchChoiceId(null);
+      return;
+    }
+
     const nextIndex = demoStepIndex + 1;
     onDemoStepIndexChange(nextIndex);
     if (nextIndex < demoModules.length) {
@@ -855,7 +1033,7 @@ function FormalMapShell({
   };
 
   return (
-    <div className="formal-analysis-shell" style={{ position: 'relative', height: '100vh', overflow: 'hidden' }}>
+    <div className="formal-analysis-shell page-motion-shell" style={{ position: 'relative', height: '100vh', overflow: 'hidden' }}>
       <AppBackground />
       <div
         className="app-content"
@@ -871,7 +1049,7 @@ function FormalMapShell({
           sourceKind={sourceKind}
         />
         <div
-          className="formal-analysis-main"
+          className="formal-analysis-main page-motion-stage"
           style={{
             flex: 1,
             minHeight: 0,
@@ -886,16 +1064,23 @@ function FormalMapShell({
             onToggle={onTogglePanel}
             projectTitle={project.title}
             projectId={project.id}
-            activeModule={displayModule}
+            activeModule={panelModule}
             externalBinding={externalBinding}
-            messages={formalMap?.messages ?? []}
+            messages={branchScenario ? [] : formalMap?.messages ?? []}
             activeJobId={formalMap?.active_job_id ?? null}
             isGuidedDemo={isGuidedDemoProject}
             panelWidth={panelWidth}
             requiredBindingId={requiredBindingId}
             demoNotice={bindingNotice}
             demoFlowComplete={demoFlowComplete}
+            demoBranchStep={currentBranchStep}
+            selectedDemoBranchChoiceId={selectedBranchChoiceId}
+            demoStepNumber={Math.min(demoStepIndex + 1, demoStepTotal)}
+            demoStepTotal={demoStepTotal}
+            formalGuidanceState={branchScenario ? null : formalMap?.snapshot?.data.guidanceState ?? null}
+            onDemoBranchChoice={selectDemoBranchChoice}
             onDemoStepComplete={completeDemoStep}
+            onOpenReport={() => setReportRequestNonce((value) => value + 1)}
             onSubmitted={onRefresh}
           />
           {!collapsed && (
@@ -927,19 +1112,25 @@ function FormalMapShell({
               }}
             />
           )}
-          <main className="formal-map-workbench-main">
+          <main className="formal-map-workbench-main page-motion-panel--right">
             <FormalMapWorkspace
               projectTitle={project.title}
               canvas={canvas}
-              mapSnapshot={formalMap?.snapshot?.data ?? null}
+              mapSnapshot={branchScenario ? null : formalMap?.snapshot?.data ?? null}
               isSampleProject={isSampleProject}
               activeJobId={formalMap?.active_job_id ?? null}
               hasUserMessage={hasUserMessage}
-              activeModule={displayModule}
-              activeModuleId={displayModule.id}
+              activeModule={workspaceModule}
+              activeModuleId={workspaceModule.id}
               onSelectModule={selectModuleWithDemoRules}
               onAddBinding={addBindingWithDemoRules}
               requiredBindingId={requiredBindingId}
+              demoBranchScenario={branchScenario}
+              demoBranchStep={currentBranchStep}
+              selectedDemoBranchChoice={selectedBranchChoice}
+              demoBranchRoute={branchRoute}
+              guidedDemoReportReady={isGuidedDemoProject ? demoFlowComplete : undefined}
+              reportOpenRequest={reportRequestNonce}
             />
           </main>
         </div>
@@ -960,6 +1151,12 @@ function FormalMapWorkspace({
   onSelectModule,
   onAddBinding,
   requiredBindingId,
+  demoBranchScenario,
+  demoBranchStep,
+  selectedDemoBranchChoice,
+  demoBranchRoute,
+  guidedDemoReportReady,
+  reportOpenRequest,
 }: {
   projectTitle: string;
   canvas: QuickDemoGuidanceCanvas;
@@ -972,22 +1169,94 @@ function FormalMapWorkspace({
   onSelectModule: (id: string) => void;
   onAddBinding: (binding: FormalBinding) => void;
   requiredBindingId?: string;
+  demoBranchScenario?: FormalDemoBranchScenario | null;
+  demoBranchStep?: FormalDemoBranchStep | null;
+  selectedDemoBranchChoice?: FormalDemoBranchChoice | null;
+  demoBranchRoute?: FormalDemoBranchRouteEntry[];
+  guidedDemoReportReady?: boolean;
+  reportOpenRequest?: number;
 }) {
   const rootTitle = canvas.title.replace(/详细指导$/, '').replace(/需求地图$/, '');
-  const knownCount = canvas.modules.reduce((sum, module) => sum + module.known.length, 0);
-  const optionCount = canvas.modules.reduce((sum, module) => sum + (module.options?.length ?? 0), 0);
+  const branchEntries = useMemo(() => demoBranchRoute ?? [], [demoBranchRoute]);
+  const completedBranchModuleIds = new Set(branchEntries.map((entry) => entry.moduleId));
+  const knownCount = canvas.modules.reduce((sum, module) => sum + module.known.length, 0) + branchEntries.length;
+  const pendingCount = canvas.modules.reduce(
+    (sum, module) => sum + (completedBranchModuleIds.has(module.id) ? 0 : module.questions.length),
+    0,
+  );
+  const optionCount =
+    canvas.modules.reduce((sum, module) => sum + (module.options?.length ?? 0), 0) +
+    branchEntries.length +
+    (demoBranchStep?.choices.length ?? 0);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportTab, setReportTab] = useState<FormalReportTab>('overview');
+  const [reportActionStatus, setReportActionStatus] = useState<FormalReportActionStatus>('idle');
   const [mobilePanel, setMobilePanel] = useState<FormalMobilePanel>('current');
-  const reportProjection = mapSnapshot?.reportProjection ?? buildLocalReportProjection(projectTitle, canvas);
+  const branchStepCount = demoBranchScenario ? formalBranchStepTotal(demoBranchScenario) : 0;
+  const reportReady = demoBranchScenario
+    ? !demoBranchStep && branchEntries.length > 0
+    : guidedDemoReportReady ?? mapSnapshot?.guidanceState?.reportReady ?? false;
+  const mapNotes = demoBranchScenario
+    ? ['在左侧选择处理方向', '确认后进入下一项', '完成后查看报告']
+    : ['点击节点切换当前问题', '点“加入”引用节点', '报告按当前地图生成'];
+  const reportProjection = useMemo(
+    () => mapSnapshot?.reportProjection ?? buildLocalReportProjection(projectTitle, canvas, branchEntries),
+    [branchEntries, canvas, mapSnapshot?.reportProjection, projectTitle],
+  );
   const exportDocument = useMemo(
-    () => buildFormalExportDocument(projectTitle, canvas, mapSnapshot),
-    [projectTitle, canvas, mapSnapshot],
+    () => buildFormalExportDocument(projectTitle, canvas, mapSnapshot, branchEntries),
+    [branchEntries, projectTitle, canvas, mapSnapshot],
   );
   const relatedModules =
     activeModule.relatedModuleIds
       ?.map((id) => canvas.modules.find((module) => module.id === id))
       .filter((module): module is QuickDemoGuidanceModule => Boolean(module)) ?? [];
+  const candidateBranchModuleIds = new Set(
+    demoBranchStep?.choices
+      .map((choice) => choice.nextStepId ? demoBranchScenario?.steps[choice.nextStepId]?.moduleId : null)
+      .filter((id): id is string => Boolean(id)) ?? [],
+  );
+  const impactedBranchModuleIds = new Set(selectedDemoBranchChoice?.impactModuleIds ?? []);
+  const currentBranchModule = demoBranchStep
+    ? canvas.modules.find((module) => module.id === demoBranchStep.moduleId)
+    : null;
+
+  useEffect(() => {
+    if (!reportOpenRequest) return;
+    setMobilePanel('report');
+    setReportTab('overview');
+    setReportOpen(true);
+  }, [reportOpenRequest]);
+
+  useEffect(() => {
+    if (!reportOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setReportOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [reportOpen]);
+
+  useEffect(() => {
+    if (reportActionStatus === 'idle') return;
+    const timer = window.setTimeout(() => setReportActionStatus('idle'), 1800);
+    return () => window.clearTimeout(timer);
+  }, [reportActionStatus]);
+
+  const openReport = () => {
+    setReportTab('overview');
+    setReportActionStatus('idle');
+    setReportOpen(true);
+  };
+
+  const handleCopyReport = async () => {
+    try {
+      const copied = await copyReportText(exportDocument);
+      setReportActionStatus(copied ? 'copied' : 'copy-error');
+    } catch {
+      setReportActionStatus('copy-error');
+    }
+  };
 
   return (
     <section className="formal-map-workbench" aria-label="正式项目需求地图">
@@ -1010,6 +1279,8 @@ function FormalMapWorkspace({
           type="button"
           className={mobilePanel === 'report' ? 'is-active' : ''}
           onClick={() => setMobilePanel('report')}
+          disabled={!reportReady}
+          title={reportReady ? undefined : '完成关键判断后查看报告'}
         >
           报告预览
         </button>
@@ -1029,10 +1300,62 @@ function FormalMapWorkspace({
         <div className="formal-map-workbench__stats" aria-label="地图状态">
           <StatTile label="地图节点" value={canvas.modules.length} tone="gold" />
           <StatTile label="已整理" value={knownCount} tone="sage" />
-          <StatTile label="待确认" value={canvas.modules.reduce((sum, module) => sum + module.questions.length, 0)} tone="rose" />
+          <StatTile label="待确认" value={pendingCount} tone="rose" />
           <StatTile label="方案" value={optionCount} tone="muted" />
         </div>
       </header>
+
+      {demoBranchScenario && (
+        <section
+          className="formal-map-branch-route page-motion-stage"
+          data-branch-route={demoBranchScenario.caseId}
+          aria-label="当前项目处理路线"
+        >
+          <div className="formal-map-branch-route__head">
+            <div>
+              <span className="app-label">
+                <GitBranch size={13} strokeWidth={1.5} aria-hidden="true" />
+                {demoBranchScenario.domainLabel}
+              </span>
+              <strong>{demoBranchScenario.routeTitle}</strong>
+            </div>
+            <p>
+              {demoBranchStep?.context ?? demoBranchScenario.completionMessage}
+            </p>
+          </div>
+          <div className="formal-map-branch-route__path" aria-label="已选择路线">
+            {(demoBranchRoute ?? []).map((entry) => (
+              <span key={`${entry.stepId}:${entry.choiceId}`} className="is-complete">
+                <CheckCircle2 size={12} strokeWidth={1.6} aria-hidden="true" />
+                {entry.routeLabel}
+              </span>
+            ))}
+            {demoBranchStep && currentBranchModule && (
+              <span className="is-current">
+                <CircleDashed size={12} strokeWidth={1.6} aria-hidden="true" />
+                当前：{currentBranchModule.title}
+              </span>
+            )}
+            {!demoBranchStep && (demoBranchRoute?.length ?? 0) > 0 && (
+              <span className="is-ready">
+                <Sparkles size={12} strokeWidth={1.6} aria-hidden="true" />
+                路线已整理
+              </span>
+            )}
+          </div>
+          {selectedDemoBranchChoice && (
+            <div className="formal-map-branch-route__impact" role="status" aria-live="polite">
+              <span>选择「{selectedDemoBranchChoice.title}」后优先影响</span>
+              {selectedDemoBranchChoice.impactModuleIds.map((moduleId) => {
+                const impactedModule = canvas.modules.find((item) => item.id === moduleId);
+                return impactedModule
+                  ? <strong key={impactedModule.id}>{impactedModule.title}</strong>
+                  : null;
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {isSampleProject && (
         <div
@@ -1045,7 +1368,9 @@ function FormalMapWorkspace({
             lineHeight: 1.55,
           }}
         >
-          当前为参考工作台，用于查看需求地图的分析方式；创建自己的项目请回到“项目起点输入”。
+          {demoBranchScenario
+            ? `在左侧完成 ${branchStepCount} 项关键判断，地图会同步标出处理路线；其他节点仍可随时浏览。`
+            : '当前内容会随回答继续整理；你也可以随时浏览其他节点查看影响。'}
         </div>
       )}
 
@@ -1055,8 +1380,8 @@ function FormalMapWorkspace({
           title={hasUserMessage ? '正在更新需求地图' : '正在生成需求地图'}
           description={
             hasUserMessage
-              ? '系统会把最新回答写回相关节点，并同步更新报告预览。'
-              : '系统会先拆出地图节点，再整理当前已知内容和待确认问题。'
+              ? '回答后，相关节点和报告预览会一起更新。'
+              : '项目说明会先整理成地图节点，再标出已知内容和待确认问题。'
           }
           steps={
             hasUserMessage
@@ -1094,10 +1419,20 @@ function FormalMapWorkspace({
               <strong>{rootTitle}</strong>
               <small>当前内容只是整理结果，重要结论会在各节点里继续确认。</small>
             </div>
-            <div className="formal-map-main-branches">
+            <div className="formal-map-main-branches page-motion-list">
               {canvas.modules.map((module, index) => {
                 const binding = moduleToBinding(module);
                 const isRequiredBinding = requiredBindingId === binding.id;
+                const isCompletedBranchModule = completedBranchModuleIds.has(module.id);
+                const isCandidateBranchModule = candidateBranchModuleIds.has(module.id);
+                const isImpactedBranchModule = impactedBranchModuleIds.has(module.id);
+                const branchStateLabel = isCompletedBranchModule
+                  ? '已走过'
+                  : isImpactedBranchModule
+                    ? '将受影响'
+                    : isCandidateBranchModule
+                      ? '可能下一步'
+                      : null;
                 return (
                 <article
                   key={module.id}
@@ -1105,6 +1440,9 @@ function FormalMapWorkspace({
                     'formal-map-main-node',
                     module.id === activeModuleId ? 'formal-map-main-node--active' : '',
                     isRequiredBinding ? 'formal-map-main-node--required' : '',
+                    isCompletedBranchModule ? 'formal-map-main-node--branch-complete' : '',
+                    isCandidateBranchModule ? 'formal-map-main-node--branch-candidate' : '',
+                    isImpactedBranchModule ? 'formal-map-main-node--branch-impacted' : '',
                   ].filter(Boolean).join(' ')}
                 >
                   <button
@@ -1120,17 +1458,24 @@ function FormalMapWorkspace({
                     </span>
                   </button>
                   <span className="formal-map-main-node__meta">
-                    <span className={`formal-map-status formal-map-status--${statusTone(module.status)}`}>
-                      {displayModuleStatus(module.status)}
+                    <span className="formal-map-main-node__states">
+                      <span className={`formal-map-status formal-map-status--${statusTone(module.status)}`}>
+                        {displayModuleStatus(module.status)}
+                      </span>
+                      {branchStateLabel && (
+                        <span className="formal-map-branch-state">{branchStateLabel}</span>
+                      )}
                     </span>
-                    <button
-                      type="button"
-                      className={`formal-map-main-node__add ${isRequiredBinding ? 'is-required' : ''}`}
-                      onClick={() => onAddBinding(binding)}
-                    >
-                      <Sparkles size={12} strokeWidth={1.5} aria-hidden="true" />
-                      加入
-                    </button>
+                    {!demoBranchScenario && (
+                      <button
+                        type="button"
+                        className={`formal-map-main-node__add ${isRequiredBinding ? 'is-required' : ''}`}
+                        onClick={() => onAddBinding(binding)}
+                      >
+                        <Sparkles size={12} strokeWidth={1.5} aria-hidden="true" />
+                        加入
+                      </button>
+                    )}
                   </span>
                 </article>
                 );
@@ -1138,7 +1483,7 @@ function FormalMapWorkspace({
             </div>
           </div>
           <div className="formal-map-map-notes" aria-label="地图操作">
-            {['点击节点切换当前问题', '点“加入”引用节点', '报告按当前地图生成'].map((item, index) => (
+            {mapNotes.map((item, index) => (
               <div key={item}>
                 <span>{index + 1}</span>
                 <strong>{item}</strong>
@@ -1149,16 +1494,22 @@ function FormalMapWorkspace({
         </div>
 
         <div className={`formal-map-mobile-panel formal-map-mobile-panel--current ${mobilePanel === 'current' ? 'is-active' : ''}`}>
-        <div className="formal-map-current-node" aria-label="当前节点工作区">
+        <div
+          key={activeModule.id}
+          className="formal-map-current-node page-motion-stage"
+          aria-label="当前节点工作区"
+        >
           <div className="formal-map-current-node__title">
             <div>
               <div className="app-label">当前节点</div>
               <h2>{activeModule.title}</h2>
             </div>
-            <button type="button" onClick={() => onAddBinding(moduleToBinding(activeModule))}>
-              <Sparkles size={14} strokeWidth={1.5} aria-hidden="true" />
-              加入对话
-            </button>
+            {!demoBranchScenario && (
+              <button type="button" onClick={() => onAddBinding(moduleToBinding(activeModule))}>
+                <Sparkles size={14} strokeWidth={1.5} aria-hidden="true" />
+                加入对话
+              </button>
+            )}
           </div>
           <p>{activeModule.summary}</p>
 
@@ -1168,7 +1519,22 @@ function FormalMapWorkspace({
             <MapFactGroup title="待确认" items={activeModule.questions} tone="rose" />
           </div>
 
-          {activeModule.options && activeModule.options.length > 0 && (
+          {demoBranchStep?.moduleId === activeModule.id ? (
+            <div className="formal-map-current-branch" role="status" aria-live="polite">
+              <span className="app-label">
+                <GitBranch size={12} strokeWidth={1.5} aria-hidden="true" />
+                当前处理方向
+              </span>
+              {selectedDemoBranchChoice ? (
+                <>
+                  <strong>{selectedDemoBranchChoice.title}</strong>
+                  <p>{selectedDemoBranchChoice.consequence}</p>
+                </>
+              ) : (
+                <p>请在左侧「选择处理方向」中选一项，地图会立即标出后续影响。</p>
+              )}
+            </div>
+          ) : !demoBranchScenario && activeModule.options && activeModule.options.length > 0 ? (
             <div className="formal-map-node-options">
               <div className="formal-map-node-options__label">可选方案</div>
               {activeModule.options.map((option) => (
@@ -1187,7 +1553,7 @@ function FormalMapWorkspace({
                 </button>
               ))}
             </div>
-          )}
+          ) : null}
 
           <div className="formal-map-related">
             <span>
@@ -1214,18 +1580,24 @@ function FormalMapWorkspace({
             <Target className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
             报告预览
           </div>
-          <span>报告会按当前地图生成；还没确认的内容会继续保留为待确认。</span>
-          {reportProjection?.overview && (
+          <span>
+            {reportReady
+              ? '报告已按当前地图生成；还没确认的内容会继续保留为待确认。'
+              : demoBranchScenario
+                ? `完成左侧 ${branchStepCount} 项关键判断后，这里会生成本轮完整报告。`
+                : `还需完成 ${mapSnapshot?.guidanceState?.unresolvedCount ?? '当前'} 项关键确认，报告会在本轮覆盖完成后开放。`}
+          </span>
+          {reportReady && reportProjection?.overview && (
             <small>{reportProjection.overview.slice(0, 96)}</small>
           )}
           <button
             type="button"
             className="formal-report-open"
-            disabled={!reportProjection}
-            onClick={() => setReportOpen(true)}
+            disabled={!reportProjection || !reportReady}
+            onClick={openReport}
           >
             <FileText className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
-            查看报告
+            {reportReady ? '查看报告' : '完成判断后查看'}
           </button>
         </div>
         <div>
@@ -1238,68 +1610,88 @@ function FormalMapWorkspace({
         </div>
       </footer>
 
-      {reportOpen && reportProjection && (
-        <div className="formal-report-modal" role="dialog" aria-modal="true" aria-label="正式项目报告">
-          <div className="formal-report-modal__panel">
-            <header className="formal-report-modal__head">
-              <div>
-                <div className="app-label">
-                  <FileText className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+      {reportOpen && reportProjection && createPortal(
+        <div className="formal-report-workspace" role="dialog" aria-modal="true" aria-label="正式项目报告">
+          <header className="formal-report-workspace__topbar">
+            <div className="formal-report-workspace__identity">
+              <button type="button" className="app-nav-back" onClick={() => setReportOpen(false)} autoFocus>
+                <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+                返回地图
+              </button>
+              <span className="formal-report-workspace__divider" aria-hidden="true" />
+              <div className="formal-report-workspace__title">
+                <span className="app-label">
+                  <FileText size={13} strokeWidth={1.5} aria-hidden="true" />
                   正式项目报告
-                </div>
+                </span>
                 <h2>{projectTitle}</h2>
               </div>
-              <button type="button" aria-label="关闭报告" onClick={() => setReportOpen(false)}>
-                <X size={16} strokeWidth={1.5} aria-hidden="true" />
+              <span className="app-chip app-chip-sage">已就绪</span>
+            </div>
+            <div className="formal-report-workspace__actions">
+              <span className="formal-report-workspace__action-status" role="status" aria-live="polite">
+                {reportActionStatus === 'copied'
+                  ? '已复制'
+                  : reportActionStatus === 'copy-error'
+                    ? '复制失败'
+                    : ''}
+              </span>
+              <button type="button" className="app-btn-ghost" onClick={() => void handleCopyReport()}>
+                {reportActionStatus === 'copied' ? (
+                  <Check size={15} strokeWidth={1.6} aria-hidden="true" />
+                ) : (
+                  <Copy size={15} strokeWidth={1.5} aria-hidden="true" />
+                )}
+                复制专业报告
               </button>
-            </header>
-            <div className="formal-report-modal__tabs" role="tablist" aria-label="报告视图">
               <button
                 type="button"
-                className={reportTab === 'overview' ? 'is-active' : ''}
+                className="app-btn-primary"
+                onClick={() => downloadReportMarkdown(projectTitle, exportDocument)}
+              >
+                <Download size={15} strokeWidth={1.5} aria-hidden="true" />
+                下载 Markdown
+              </button>
+            </div>
+          </header>
+
+          <main className="formal-report-workspace__main">
+            <div className="formal-report-workspace__tabs" role="tablist" aria-label="报告视图">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={reportTab === 'overview'}
+                className={`app-chip brief-view-tab ${reportTab === 'overview' ? '' : 'app-chip-muted'}`}
                 onClick={() => setReportTab('overview')}
               >
+                <ListChecks size={14} strokeWidth={1.5} aria-hidden="true" />
                 普通概述
               </button>
               <button
                 type="button"
-                className={reportTab === 'detail' ? 'is-active' : ''}
+                role="tab"
+                aria-selected={reportTab === 'detail'}
+                className={`app-chip brief-view-tab ${reportTab === 'detail' ? '' : 'app-chip-muted'}`}
                 onClick={() => setReportTab('detail')}
               >
+                <FileText size={14} strokeWidth={1.5} aria-hidden="true" />
                 专业报告
               </button>
-              <button
-                type="button"
-                className={reportTab === 'export' ? 'is-active' : ''}
-                onClick={() => setReportTab('export')}
-              >
-                导出专业报告
-              </button>
             </div>
-            <section className="formal-report-modal__body">
-              {reportTab === 'export' ? (
-                <article className="brief-export-document">
-                  <header className="brief-export-document__head">
-                    <div className="app-label">
-                      <Download className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
-                      导出专业报告
-                    </div>
-                    <h3>可复制的正式项目需求文档</h3>
-                    <p>
-                      内容与专业报告来自同一份需求地图，适合复制到协作文档或后续排版。
-                    </p>
-                  </header>
-                  <MarkdownBriefContent content={exportDocument} variant="exec" />
-                </article>
-              ) : (
-                <MarkdownBriefContent
-                  content={reportTab === 'overview' ? reportProjection.overview : reportProjection.detailedReport}
-                  variant={reportTab === 'overview' ? 'simple' : 'exec'}
-                />
-              )}
+
+            <section
+              className="formal-report-workspace__document app-card app-card-pad"
+              role="tabpanel"
+              aria-label={reportTab === 'overview' ? '普通概述' : '专业报告'}
+            >
+              <MarkdownBriefContent
+                content={reportTab === 'overview' ? reportProjection.overview : reportProjection.detailedReport}
+                variant={reportTab === 'overview' ? 'simple' : 'exec'}
+              />
             </section>
-          </div>
-        </div>
+          </main>
+        </div>,
+        document.body,
       )}
     </section>
   );
@@ -1309,13 +1701,21 @@ function buildFormalExportDocument(
   projectTitle: string,
   canvas: QuickDemoGuidanceCanvas,
   mapSnapshot?: FormalMapData | null,
+  branchRoute: FormalDemoBranchRouteEntry[] = [],
 ): string {
   const report = mapSnapshot?.reportProjection?.detailedReport?.trim();
+  const completedModuleIds = new Set(branchRoute.map((entry) => entry.moduleId));
+  const branchItems = branchRoute.map((entry) => {
+    const routeModule = canvas.modules.find((item) => item.id === entry.moduleId);
+    return `- ${routeModule?.title ?? '当前节点'} / ${entry.choiceTitle}：${entry.consequence}`;
+  });
   const knownItems = canvas.modules.flatMap((module) =>
     module.known.map((item) => `- ${module.title}：${item}`),
   );
   const pendingItems = canvas.modules.flatMap((module) =>
-    module.questions.map((item) => `- ${module.title}：${item}`),
+    completedModuleIds.has(module.id)
+      ? []
+      : module.questions.map((item) => `- ${module.title}：${item}`),
   );
   const optionItems = canvas.modules.flatMap((module) =>
     (module.options ?? []).map((option) => (
@@ -1327,6 +1727,9 @@ function buildFormalExportDocument(
     return [
       `# ${projectTitle}需求分析文档`,
       '',
+      ...(branchItems.length > 0
+        ? ['## 已确认处理路线', '', ...branchItems, '']
+        : []),
       report,
       '',
       '## 版本来源',
@@ -1343,6 +1746,15 @@ function buildFormalExportDocument(
     '',
     mapSnapshot?.summary || '当前项目已进入需求地图整理阶段。',
     '',
+    ...(branchItems.length > 0
+      ? [
+          '## 已确认处理路线',
+          '',
+          `- 路线：${branchRoute.map((entry) => entry.routeLabel).join(' → ')}`,
+          ...branchItems,
+          '',
+        ]
+      : []),
     '## 已明确内容',
     '',
     ...(knownItems.length > 0 ? knownItems : ['- 暂无已确认内容。']),
@@ -1365,12 +1777,20 @@ function buildFormalExportDocument(
 function buildLocalReportProjection(
   projectTitle: string,
   canvas: QuickDemoGuidanceCanvas,
+  branchRoute: FormalDemoBranchRouteEntry[] = [],
 ): FormalMapData['reportProjection'] {
+  const completedModuleIds = new Set(branchRoute.map((entry) => entry.moduleId));
+  const branchItems = branchRoute.map((entry) => {
+    const routeModule = canvas.modules.find((item) => item.id === entry.moduleId);
+    return `${routeModule?.title ?? '当前节点'} / ${entry.choiceTitle}：${entry.consequence}`;
+  });
   const knownItems = canvas.modules.flatMap((module) =>
     module.known.map((item) => `${module.title}：${item}`),
   );
   const pendingItems = canvas.modules.flatMap((module) =>
-    module.questions.map((item) => `${module.title}：${item}`),
+    completedModuleIds.has(module.id)
+      ? []
+      : module.questions.map((item) => `${module.title}：${item}`),
   );
   const optionItems = canvas.modules.flatMap((module) =>
     (module.options ?? []).map((option) => (
@@ -1378,14 +1798,38 @@ function buildLocalReportProjection(
     )),
   );
   const overview = [
-    `${projectTitle}已经整理成 ${canvas.modules.length} 个需求地图节点。`,
-    knownItems.length > 0
-      ? `目前比较明确的是：${knownItems.slice(0, 3).join('；')}。`
-      : '目前还需要先确认项目起点、对象、范围和完成标准。',
-    pendingItems.length > 0
-      ? `下一步建议先确认：${pendingItems.slice(0, 3).join('；')}。`
-      : '当前没有明显待确认项，可以进入专业报告复核。',
-  ].join('\n\n');
+    `# ${projectTitle}`,
+    '',
+    '## 本轮概述',
+    '',
+    `项目已经整理成 ${canvas.modules.length} 个需求地图节点。`,
+    '',
+    ...(branchItems.length > 0
+      ? [
+          '## 已确认处理路线',
+          '',
+          `- ${branchRoute.map((entry) => entry.routeLabel).join(' → ')}`,
+          ...branchItems.map((item) => `- ${item}`),
+          '',
+        ]
+      : []),
+    '## 目前明确',
+    '',
+    ...(knownItems.length > 0
+      ? knownItems.slice(0, 3).map((item) => `- ${item}`)
+      : ['- 还需要先确认项目起点、对象、范围和完成标准。']),
+    '',
+    '## 下一步',
+    '',
+    ...(pendingItems.length > 0
+      ? pendingItems.slice(0, 3).map((item) => `- ${item}`)
+      : ['- 当前没有明显待确认项，可以进入专业报告复核。']),
+  ].join('\n');
+  const hasBranchRoute = branchItems.length > 0;
+  const knownSectionNumber = hasBranchRoute ? 3 : 2;
+  const optionSectionNumber = hasBranchRoute ? 4 : 3;
+  const pendingSectionNumber = hasBranchRoute ? 5 : 4;
+  const usageSectionNumber = hasBranchRoute ? 6 : 5;
   const detailedReport = [
     `# ${projectTitle}需求分析报告`,
     '',
@@ -1393,19 +1837,28 @@ function buildLocalReportProjection(
     '',
     `当前项目已被拆分为 ${canvas.modules.length} 个需求地图节点，用于围绕目标、对象、范围、方案、风险和报告进行逐步确认。`,
     '',
-    '## 2. 已整理内容',
+    ...(hasBranchRoute
+      ? [
+          '## 2. 已确认处理路线',
+          '',
+          `- 路线：${branchRoute.map((entry) => entry.routeLabel).join(' → ')}`,
+          ...branchItems.map((item) => `- ${item}`),
+          '',
+        ]
+      : []),
+    `## ${knownSectionNumber}. 已整理内容`,
     '',
     ...(knownItems.length > 0 ? knownItems.map((item) => `- ${item}`) : ['- 暂无已明确内容。']),
     '',
-    '## 3. 方案与取舍',
+    `## ${optionSectionNumber}. 方案与取舍`,
     '',
     ...(optionItems.length > 0 ? optionItems.map((item) => `- ${item}`) : ['- 暂无可选方案。']),
     '',
-    '## 4. 待确认内容',
+    `## ${pendingSectionNumber}. 待确认内容`,
     '',
     ...(pendingItems.length > 0 ? pendingItems.map((item) => `- ${item}`) : ['- 暂无待确认内容。']),
     '',
-    '## 5. 使用说明',
+    `## ${usageSectionNumber}. 使用说明`,
     '',
     '- 本报告来自当前需求地图。未确认内容只能作为待确认项，不应直接写成最终承诺。',
     '- 后续调整应先回到对应节点确认，再进入新的报告版本。',

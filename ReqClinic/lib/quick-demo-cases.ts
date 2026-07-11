@@ -1380,8 +1380,12 @@ export function buildQuickDemoFixture(
     summary?: string;
     slots?: QuickDemoCase['finalUnderstanding']['slots'];
   } | null,
+  optionsOverride?: QuickDemoCase['options'],
 ) {
-  const baseCase = getQuickDemoCase(sourceCaseId) ?? QUICK_DEMO_CASES[0];
+  const originalCase = getQuickDemoCase(sourceCaseId) ?? QUICK_DEMO_CASES[0];
+  const baseCase: QuickDemoCase = optionsOverride
+    ? { ...originalCase, options: optionsOverride }
+    : originalCase;
   const demoCase: QuickDemoCase = understandingOverride
     ? {
         ...baseCase,

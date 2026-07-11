@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiClient } from '@/lib/api';
-import { hasModelApiAccess, looksLikeRequirementInput, REQUIREMENT_INPUT_HINT } from '@/lib/intake-guards';
+import { hasModelApiAccess, looksLikeRequirementInput, REQUIREMENT_INPUT_HINT, warmModelApiAccess } from '@/lib/intake-guards';
 import { PRODUCT_TERMS } from '@/lib/product-language';
 
 const MAX_LENGTH = 10000;
@@ -17,6 +17,10 @@ export function PromptBar() {
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
   const composingRef = useRef(false);
   const submittingRef = useRef(false);
+
+  useEffect(() => {
+    warmModelApiAccess();
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     const value = input.trim();

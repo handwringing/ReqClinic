@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { StubProvider } from '../src/ai/stub-provider';
+import { buildDeterministicFormalSnapshot } from '../src/agent/formal-runtime';
 import { JobWorker } from '../src/queue/worker';
 import { AgentRunRepo } from '../src/repo/agent-run-repo';
 import { AiRunRepo } from '../src/repo/ai-run-repo';
@@ -12,6 +13,36 @@ import { UserRepo } from '../src/repo/user-repo';
 import { createTestDb } from './helpers/test-db';
 
 describe('formal guidance job runtime', () => {
+  it('keeps eliciting by map coverage and enters review without a fixed round threshold', () => {
+    const baseInput = {
+      projectId: 'prj_formal_coverage',
+      projectTitle: '园区访客通行优化',
+      projectDescription: '梳理访客预约、门岗核验、异常处置和记录追踪。',
+      intakeText: '园区访客通行优化，需要明确现场流程、角色权限、异常和风险。',
+      turns: [] as Array<{ role: 'assistant' | 'user'; content: string; boundRefs?: unknown[] }>,
+      previousSnapshot: null,
+      sourceKind: 'direct' as const,
+      quickBriefSnapshot: null,
+      modelEnabled: false,
+    };
+    const initial = buildDeterministicFormalSnapshot(baseInput);
+    expect(initial.guidanceState.status).toBe('eliciting');
+    expect(initial.guidanceState.reportReady).toBe(false);
+    expect(initial.nextQuestion).toBeTruthy();
+
+    const turns = initial.modules.flatMap((module, index) => [
+      { role: 'assistant' as const, content: module.questions[0] },
+      { role: 'user' as const, content: `第 ${index + 1} 个模块的负责人已确认本轮处理口径。` },
+    ]);
+    const completed = buildDeterministicFormalSnapshot({ ...baseInput, turns });
+    expect(completed.guidanceState.status).toBe('review_ready');
+    expect(completed.guidanceState.coveredModuleCount).toBe(completed.guidanceState.totalModuleCount);
+    expect(completed.guidanceState.unresolvedCount).toBe(0);
+    expect(completed.guidanceState.reportReady).toBe(true);
+    expect(completed.nextQuestion).toBeNull();
+    expect(completed.reportProjection.overview).toContain('进入报告复核');
+  });
+
   it('creates a map snapshot, assistant question, model run, and skill audit chain', async () => {
     const db = createTestDb();
     const userRepo = new UserRepo(db.db);

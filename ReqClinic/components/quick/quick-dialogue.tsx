@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  GitBranch,
   Quote,
   SendHorizontal,
   Sparkles,
@@ -18,13 +19,18 @@ import {
 import { getApiClient } from '@/lib/api';
 import type { QuickSession, QuickSessionTurn } from '@/lib/api/types';
 import { Avatar, LongWaitProgress } from '@/components/ui';
+import { ModelUnavailableDialog } from '@/components/common/model-unavailable-dialog';
+import { useModelApiGate } from '@/lib/use-model-api-gate';
 import {
   getQuickDemoCase,
   quickDemoCardTitle,
-  quickDemoGuidedAnswers,
   quickDemoReview,
   quickDemoSupplement,
 } from '@/lib/quick-demo-cases';
+import {
+  getQuickSampleBranchScenario,
+  getQuickSampleSuggestedAnswer,
+} from '@/lib/quick-sample-branches';
 import type { QuickCardBinding } from './quick-visualization';
 
 const MAX_LENGTH = 10000;
@@ -91,15 +97,23 @@ export function QuickDialogue({
 
   const demoCase =
     session?.source_kind === 'sample' ? getQuickDemoCase(session.source_case_id) : undefined;
-  const guidedAnswers = quickDemoGuidedAnswers(session?.source_case_id);
   const isSampleSession = !!demoCase;
-  const answeredCount = Math.max(
-    0,
-    messages.filter((m) => m.role === 'user').length - 1,
-  );
+  const { modelDialogOpen, requireModelApi, dismissModelDialog } = useModelApiGate({
+    skip: isSampleSession,
+  });
+  const sampleUserMessages = messages.filter((message) => message.role === 'user');
+  const sampleAnswers = isSampleSession && sampleUserMessages[0]?.content.trim() === session?.original_input.trim()
+    ? sampleUserMessages.slice(1).map((message) => message.content)
+    : sampleUserMessages.map((message) => message.content);
+  const answeredCount = sampleAnswers.length;
+  const sampleBranchScenario = getQuickSampleBranchScenario(session?.source_case_id);
+  const sampleBranchChoices =
+    isSampleSession && session?.status === 'clarifying' && answeredCount === 0
+      ? sampleBranchScenario?.choices ?? []
+      : [];
   const guidedAnswer =
     isSampleSession && session?.status === 'clarifying'
-      ? guidedAnswers[answeredCount]
+      ? getQuickSampleSuggestedAnswer(session?.source_case_id, answeredCount, sampleAnswers)
       : undefined;
   const reviewUpdate =
     isSampleSession && session?.status === 'understanding_review'
@@ -118,7 +132,6 @@ export function QuickDialogue({
     isBusy ||
     session?.status === 'option_review' ||
     (session?.status === 'brief_ready' && !briefSupplementRequired);
-  const inputLockedForSample = session === null || isSampleSession;
 
   const canFillAnswer = !!guidedAnswer;
   const reviewTargetCardTitle = reviewUpdate
@@ -150,12 +163,15 @@ export function QuickDialogue({
     isSampleSession && session?.status === 'understanding_review' && !hasReviewCardInteraction;
   const trimmedInput = input.trim();
   const hasComposerContent = trimmedInput.length > 0;
-  const sampleSendAllowed = guidedAnswer
-    ? trimmedInput === guidedAnswer
+  const sampleClarifyingAnswerAllowed = sampleBranchChoices.length > 0
+    ? sampleBranchChoices.some((choice) => choice.answer.trim() === trimmedInput)
+    : !!guidedAnswer && guidedAnswer.trim() === trimmedInput;
+  const sampleSendAllowed = session?.status === 'clarifying'
+    ? sampleClarifyingAnswerAllowed
     : canModifyUnderstanding
-      ? !!reviewAnswer && reviewCardBound && trimmedInput === reviewAnswer
+      ? reviewCardBound && !!reviewAnswer && reviewAnswer.trim() === trimmedInput
       : supplementAnswer
-        ? supplementCardBound && trimmedInput === supplementAnswer
+        ? supplementCardBound && supplementAnswer.trim() === trimmedInput
         : false;
   const canSend =
     hasComposerContent &&
@@ -168,7 +184,8 @@ export function QuickDialogue({
   const boundCardTitle = cardBindings[0]?.title;
   const composerPlaceholder = (() => {
     if (isBusy) return '正在整理，请稍候。';
-    if (guidedAnswer) return '点击“填入回答”。';
+    if (sampleBranchChoices.length > 0) return '先选择一个回答方向。';
+    if (isSampleSession && guidedAnswer) return '点击上方按钮填入本步回答。';
     if (briefSupplementRequired) {
       if (supplementCardBound) return '点击“填入补充”，或直接补充这张卡片的说明。';
       return `先点击整理区「${supplementTargetCardTitle}」。`;
@@ -185,7 +202,7 @@ export function QuickDialogue({
     return '回答助手的问题；不确定也可以说不知道...';
   })();
   const busyMessage = (() => {
-    if (isSampleSession) return '示例会按固定流程进入下一步。';
+    if (isSampleSession) return '正在根据这次回答整理下一问。';
     if (session?.status === 'option_review') return '正在生成需求简报，完成后会自动打开新的内容。';
     if (stageActionLoading) return '正在准备下一步，完成后会自动更新。';
     return '正在整理回答，完成后会自动更新对话和整理区内容。';
@@ -204,6 +221,7 @@ export function QuickDialogue({
   const handleSend = useCallback(async () => {
     const value = input.trim();
     if (!canSend) return;
+    if (!(await requireModelApi())) return;
     setSending(true);
     try {
       const accepted = await getApiClient().postQuickSessionMessage({
@@ -222,10 +240,11 @@ export function QuickDialogue({
     } finally {
       setSending(false);
     }
-  }, [canSend, cardBindings, input, onClearCardBindings, onJobAccepted, refreshNow, sessionId]);
+  }, [canSend, cardBindings, input, onClearCardBindings, onJobAccepted, refreshNow, requireModelApi, sessionId]);
 
   const handleReviewAccept = useCallback(async () => {
     if (stageActionLoading || isJobRunning) return;
+    if (!(await requireModelApi())) return;
     setStageActionLoading(true);
     try {
       const accepted = await getApiClient().reviewQuickSessionUnderstanding({
@@ -237,10 +256,11 @@ export function QuickDialogue({
     } finally {
       setStageActionLoading(false);
     }
-  }, [isJobRunning, onJobAccepted, refreshNow, sessionId, stageActionLoading]);
+  }, [isJobRunning, onJobAccepted, refreshNow, requireModelApi, sessionId, stageActionLoading]);
 
   const handleGenerateBrief = useCallback(async () => {
     if (stageActionLoading || isJobRunning) return;
+    if (!(await requireModelApi())) return;
     setStageActionLoading(true);
     try {
       const accepted = await getApiClient().generateQuickSessionBrief({
@@ -251,7 +271,7 @@ export function QuickDialogue({
     } finally {
       setStageActionLoading(false);
     }
-  }, [isJobRunning, onJobAccepted, refreshNow, sessionId, stageActionLoading]);
+  }, [isJobRunning, onJobAccepted, refreshNow, requireModelApi, sessionId, stageActionLoading]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -270,6 +290,11 @@ export function QuickDialogue({
     textareaRef.current?.focus();
   };
 
+  const selectBranchChoice = (answer: string) => {
+    if (inputDisabledByStage) return;
+    setInput(answer);
+  };
+
   const fillReview = () => {
     if (!canFillReview || !reviewAnswer) return;
     setInput(reviewAnswer);
@@ -283,6 +308,7 @@ export function QuickDialogue({
   };
 
   return (
+    <>
     <div className="flex h-full flex-col">
       <div
         ref={scrollRef}
@@ -291,15 +317,15 @@ export function QuickDialogue({
         aria-live="polite"
       >
         {messages.length === 0 ? (
-          <div className="app-state-box" style={{ minHeight: 240 }}>
-            <Sparkles className="icon h-6 w-6" strokeWidth={1.5} />
-            <div className="title">{isSampleSession ? '对话尚未开始' : '正在准备第一问'}</div>
-            <div className="desc">
-              {isSampleSession
-                ? '选择示例后，问诊助手会直接提出第一个问题。'
-                : '问诊助手正在根据你的第一句话整理追问。'}
-            </div>
-          </div>
+          <LongWaitProgress
+            title={isSampleSession ? '正在打开问诊' : '正在准备第一问'}
+            description={
+              isSampleSession
+                ? '正在读取案例并准备第一个问题。'
+                : '问诊助手正在根据你的第一句话整理追问。'
+            }
+            steps={['读取描述', '整理重点', '准备提问']}
+          />
         ) : (
           <div className="flex flex-col gap-3">
             {messages.map((m) => (
@@ -383,17 +409,46 @@ export function QuickDialogue({
               />
             )
           )}
-          {guidedAnswer && (
+          {sampleBranchChoices.length > 0 && sampleBranchScenario && (
+            <section className="quick-sample-directions page-motion-question" aria-label="回答方向">
+              <div className="quick-sample-directions__head">
+                <span className="app-label">
+                  <GitBranch className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+                  可以从这里开始
+                </span>
+                <p>{sampleBranchScenario.prompt}</p>
+              </div>
+              <div className="quick-sample-directions__choices" role="group" aria-label="常用回答方向">
+                {sampleBranchChoices.map((choice) => {
+                  const selected = input.trim() === choice.answer;
+                  return (
+                    <button
+                      key={choice.id}
+                      type="button"
+                      className={`quick-sample-direction ${selected ? 'is-selected' : ''}`}
+                      data-quick-branch-choice={choice.id}
+                      aria-pressed={selected}
+                      onClick={() => selectBranchChoice(choice.answer)}
+                    >
+                      <strong>{choice.title}</strong>
+                      <span>{choice.routeLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {guidedAnswer && sampleBranchChoices.length === 0 && (
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={fillAnswer}
                 className="app-chip app-chip-sage"
               >
-                填入回答
+                填入参考回答
               </button>
               <span className="text-[11px]" style={{ color: 'var(--aurora-muted)' }}>
-                填入后发送。
+                本步使用案例预设回答。
               </span>
             </div>
           )}
@@ -460,7 +515,7 @@ export function QuickDialogue({
               ref={textareaRef}
               value={input}
               onChange={(e) => {
-                if (inputLockedForSample || inputDisabledByStage) return;
+                if (inputDisabledByStage || isSampleSession) return;
                 setInput(e.target.value.slice(0, MAX_LENGTH));
               }}
               onCompositionStart={() => {
@@ -470,7 +525,8 @@ export function QuickDialogue({
                 composingRef.current = false;
               }}
               onKeyDown={handleKeyDown}
-              readOnly={inputLockedForSample || inputDisabledByStage}
+              readOnly={inputDisabledByStage || isSampleSession}
+              aria-readonly={inputDisabledByStage || isSampleSession}
               placeholder={composerPlaceholder}
               className="app-textarea quick-composer-textarea"
               style={{ maxHeight: 160 }}
@@ -482,7 +538,7 @@ export function QuickDialogue({
               className="text-[11px]"
               style={{ fontFamily: 'var(--font-mono)', color: 'var(--aurora-muted)' }}
             >
-              {input.length}/{MAX_LENGTH}
+              {isSampleSession ? '受控案例' : `${input.length}/${MAX_LENGTH}`}
             </span>
             <button
               type="button"
@@ -498,6 +554,13 @@ export function QuickDialogue({
         </div>
       </div>
     </div>
+      <ModelUnavailableDialog
+        open={modelDialogOpen}
+        title="暂时不能继续问诊"
+        description="当前模型服务不可用，暂时不能处理新的回答或生成简报。你已输入的内容会保留，服务恢复后可以直接重试。"
+        onDismiss={dismissModelDialog}
+      />
+    </>
   );
 }
 

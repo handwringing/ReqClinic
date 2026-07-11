@@ -127,7 +127,7 @@ export function TrainingFeedbackPage({
 
   return (
     <div
-      className="training-feedback-shell"
+      className="training-feedback-shell page-motion-shell"
       style={{
         position: 'relative',
         minHeight: '100vh',
@@ -165,13 +165,13 @@ export function TrainingFeedbackPage({
           </span>
           {isSampleAttempt && (
             <span className="app-chip app-chip-muted">
-              参考练习
+              案例演示
             </span>
           )}
         </div>
       </header>
       <main
-        className="training-feedback-main"
+        className="training-feedback-main page-motion-stage page-motion-list"
         style={{
           maxWidth: 880,
           margin: '0 auto',

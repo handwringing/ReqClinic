@@ -1,15 +1,22 @@
 'use client';
 
 import {
+  CheckCircle2,
   ChevronRight,
+  Circle,
+  FileText,
+  GitBranch,
   Send,
   Sparkles,
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Avatar, LongWaitProgress } from '@/components/ui';
+import { ModelUnavailableDialog } from '@/components/common/model-unavailable-dialog';
 import { getApiClient } from '@/lib/api';
-import type { FormalMapMessage } from '@/lib/api/types';
+import { useModelApiGate } from '@/lib/use-model-api-gate';
+import type { FormalGuidanceState, FormalMapMessage } from '@/lib/api/types';
+import type { FormalDemoBranchChoice, FormalDemoBranchStep } from '@/lib/formal-demo-branches';
 import type { QuickDemoGuidanceModule } from '@/lib/quick-demo-cases';
 
 export interface FormalBinding {
@@ -33,7 +40,14 @@ export interface FormalAiPanelProps {
   requiredBindingId?: string;
   demoNotice?: string | null;
   demoFlowComplete?: boolean;
+  demoBranchStep?: FormalDemoBranchStep | null;
+  selectedDemoBranchChoiceId?: string | null;
+  demoStepNumber?: number;
+  demoStepTotal?: number;
+  formalGuidanceState?: FormalGuidanceState | null;
+  onDemoBranchChoice?: (choiceId: string) => void;
   onDemoStepComplete?: () => void;
+  onOpenReport?: () => void;
   onSubmitted: (jobId?: string | null) => void;
 }
 
@@ -52,7 +66,14 @@ export function FormalAiPanel({
   requiredBindingId,
   demoNotice,
   demoFlowComplete = false,
+  demoBranchStep,
+  selectedDemoBranchChoiceId,
+  demoStepNumber = 1,
+  demoStepTotal = 1,
+  formalGuidanceState,
+  onDemoBranchChoice,
   onDemoStepComplete,
+  onOpenReport,
   onSubmitted,
 }: FormalAiPanelProps) {
   const [draft, setDraft] = useState('');
@@ -60,9 +81,16 @@ export function FormalAiPanel({
   const [localMessages, setLocalMessages] = useState<FormalMapMessage[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState('');
+  const { modelDialogOpen, requireModelApi, dismissModelDialog } = useModelApiGate({
+    skip: isGuidedDemo,
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   const visibleMessages = [...messages, ...localMessages];
   const hasUserMessage = visibleMessages.some((message) => message.role === 'user');
+  const selectedDemoBranchChoice =
+    demoBranchStep?.choices.find((choice) => choice.id === selectedDemoBranchChoiceId) ?? null;
+  const isBranchDecision = isGuidedDemo && !!demoBranchStep && !demoFlowComplete;
+  const formalReviewReady = !isGuidedDemo && formalGuidanceState?.status === 'review_ready';
   const hasRequiredBinding =
     !isGuidedDemo ||
     demoFlowComplete ||
@@ -102,15 +130,55 @@ export function FormalAiPanel({
   }, [isGuidedDemo, activeModule?.id]);
 
   useEffect(() => {
-    if (!collapsed && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [collapsed, messages.length, bindings.length, activeModule?.id, activeJobId]);
+    if (!isGuidedDemo || !demoBranchStep) return;
+    setDraft(selectedDemoBranchChoice?.answer ?? '');
+  }, [demoBranchStep, isGuidedDemo, selectedDemoBranchChoice?.answer]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (collapsed || !container) return;
+    let cancelled = false;
+    let secondFrame: number | null = null;
+    const align = () => {
+      if (isBranchDecision) {
+        const decision = container.querySelector<HTMLElement>('.formal-ai-branch-decision');
+        if (!decision) {
+          container.scrollTop = 0;
+          return;
+        }
+        const topDelta = decision.getBoundingClientRect().top - container.getBoundingClientRect().top;
+        container.scrollTop = Math.max(0, container.scrollTop + topDelta - 8);
+        return;
+      }
+      container.scrollTop = container.scrollHeight;
+    };
+    const firstFrame = window.requestAnimationFrame(() => {
+      align();
+      secondFrame = window.requestAnimationFrame(align);
+      void document.fonts?.ready.then(() => {
+        if (!cancelled) align();
+      });
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [
+    activeJobId,
+    activeModule?.id,
+    bindings.length,
+    collapsed,
+    demoBranchStep?.id,
+    isBranchDecision,
+    localMessages.length,
+    messages.length,
+  ]);
 
   if (collapsed) {
     return (
       <aside
-        className="formal-ai-panel formal-ai-panel--collapsed"
+        className="formal-ai-panel formal-ai-panel--collapsed page-motion-panel--left"
         style={{
           width: 48,
           height: '100%',
@@ -185,10 +253,15 @@ export function FormalAiPanel({
     const text = draft.trim();
     if (!text || submitting || activeJobId) return;
     if (isGuidedDemo && demoFlowComplete) return;
+    if (isGuidedDemo && demoBranchStep && !selectedDemoBranchChoice) {
+      setErrorText('先选择一个处理方向，再确认这次判断。');
+      return;
+    }
     if (isGuidedDemo && !hasRequiredBinding) {
       setErrorText(`先点「${activeModule?.title ?? '当前节点'}」节点上的“加入”。`);
       return;
     }
+    if (!(await requireModelApi())) return;
     setSubmitting(true);
     setErrorText('');
     try {
@@ -199,7 +272,7 @@ export function FormalAiPanel({
           id: `local-user-${Date.now()}`,
           project_id: projectId,
           role: 'user',
-          content: text,
+          content: selectedDemoBranchChoice?.title ?? text,
           message_type: 'answer',
           bound_refs: bindings.map((binding) => ({
             id: binding.id,
@@ -213,7 +286,9 @@ export function FormalAiPanel({
           id: `local-assistant-${Date.now()}`,
           project_id: projectId,
           role: 'assistant',
-          content: `回答已纳入「${moduleTitle}」节点。请继续按照下方提示确认下一项，完成后可以查看报告。`,
+          content: selectedDemoBranchChoice
+            ? `已按「${selectedDemoBranchChoice.title}」更新「${moduleTitle}」。${selectedDemoBranchChoice.consequence}`
+            : `回答已纳入「${moduleTitle}」节点。请继续按照下方提示确认下一项，完成后可以查看报告。`,
           message_type: 'status',
           bound_refs: [],
           created_at: now,
@@ -256,9 +331,17 @@ export function FormalAiPanel({
     setDraft(buildDemoFormalAnswer(activeModule, projectTitle));
   }
 
+  function selectDemoBranchChoice(choice: FormalDemoBranchChoice) {
+    if (submitting || activeJobId || demoFlowComplete) return;
+    setErrorText('');
+    setDraft(choice.answer);
+    onDemoBranchChoice?.(choice.id);
+  }
+
   return (
+    <>
     <aside
-      className="formal-ai-panel"
+      className="formal-ai-panel page-motion-panel--left"
       style={{
         width: panelWidth,
         height: '100%',
@@ -324,20 +407,33 @@ export function FormalAiPanel({
       >
         {activeModule && (
           <FormalAiContextCard
+            key={`${activeModule.id}-${demoBranchStep?.id ?? 'linear'}-${activeJobId ? 'busy' : 'ready'}`}
             module={activeModule}
             activeJobId={activeJobId}
             hasUserMessage={hasUserMessage}
+            questionOverride={demoBranchStep?.prompt}
+            reviewReady={formalReviewReady}
           />
         )}
-        {visibleMessages.length === 0 && (
+        {isGuidedDemo && demoBranchStep && !demoFlowComplete && (
+          <DemoBranchDecision
+            step={demoBranchStep}
+            selectedChoiceId={selectedDemoBranchChoiceId}
+            stepNumber={demoStepNumber}
+            stepTotal={demoStepTotal}
+            onSelect={selectDemoBranchChoice}
+          />
+        )}
+        {visibleMessages.length === 0 && !isBranchDecision && (
           <FormalMessageBubble
             message={{
               id: 'local-initial-question',
               project_id: projectId,
               role: 'assistant',
-              content: activeModule?.questions[0]
-                ? `问诊助手先问：${activeModule.questions[0]}`
-                : '问诊助手会根据需求地图继续追问。先确认最影响范围和交付的一个问题。',
+              content:
+                demoBranchStep?.prompt ??
+                activeModule?.questions[0] ??
+                '我们先确认最影响范围和交付的问题。',
               message_type: 'question',
               bound_refs: [],
               created_at: new Date().toISOString(),
@@ -362,93 +458,253 @@ export function FormalAiPanel({
         )}
       </div>
 
-      <form
-        style={{
-          flexShrink: 0,
-          borderTop: '1px solid var(--aurora-hair)',
-          padding: 10,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-        }}
-        onSubmit={(event) => void submit(event)}
-      >
-        {isGuidedDemo && (
-          <div
-            className="formal-ai-demo-guide"
-            role="note"
-          >
-            <span>
-              {demoFlowComplete
-                ? '本轮确认已完成，可以查看报告或返回入口。'
-                : <>当前步骤：先点「{activeModule?.title ?? '当前节点'}」上的“加入”，再填入回答并发送。</>}
-            </span>
-            <button
-              type="button"
-              className="app-chip app-chip-sage"
-              onClick={fillDemoAnswer}
-              disabled={Boolean(activeJobId) || submitting || !hasRequiredBinding || demoFlowComplete}
-            >
-              填入回答
-            </button>
+      {isBranchDecision ? (
+        <form
+          className="formal-ai-decision-footer"
+          onSubmit={(event) => void submit(event)}
+        >
+          <div className="formal-ai-decision-footer__status" role="status" aria-live="polite">
+            <strong>
+              {selectedDemoBranchChoice
+                ? `已选择：${selectedDemoBranchChoice.title}`
+                : '请选择一个处理方向'}
+            </strong>
+            <p>
+              {selectedDemoBranchChoice
+                ? selectedDemoBranchChoice.consequence
+                : '每个方向都会改变后续优先确认的内容，选中后再继续。'}
+            </p>
           </div>
-        )}
-        {isGuidedDemo && (demoNotice || errorText) && (
-          <div className="formal-ai-demo-notice" role="status" aria-live="polite">
-            {demoNotice ?? errorText}
-          </div>
-        )}
-        <div className="inline-composer-field" style={{ minHeight: 88 }}>
-          {bindings.length > 0 && (
-            <div className="inline-composer-reference-strip" aria-label="已加入对话的节点">
-              {bindings.map((binding) => (
-              <span
-                key={binding.id}
-                className="inline-reference-token"
-                title={`${binding.title} · ${binding.detail}`}
-              >
-                <Sparkles className="h-3 w-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
-                <span className="inline-reference-token__label">{binding.title}</span>
-                <button
-                  type="button"
-                  aria-label={`移除 ${binding.title}`}
-                  className="inline-reference-token__remove"
-                  onClick={() => removeBinding(binding.id)}
-                >
-                  <X className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </span>
-              ))}
+          {(demoNotice || errorText) && (
+            <div className="formal-ai-demo-notice" role="status" aria-live="polite">
+              {errorText || demoNotice}
             </div>
           )}
-          <textarea
-            className={`app-textarea inline-composer-textarea ${isGuidedDemo ? 'inline-composer-textarea--locked' : ''}`}
-            value={draft}
-            onChange={(event) => {
-              if (isGuidedDemo) return;
-              setDraft(event.target.value);
-            }}
-            placeholder={activeJobId ? '正在更新地图，请稍候。' : isGuidedDemo ? (demoFlowComplete ? '本轮确认已完成，可以查看报告。' : `先点「${activeModule?.title ?? '当前节点'}」上的“加入”，再点击“填入回答”。`) : '回答当前问题；也可以先从需求地图加入节点。'}
-            rows={3}
-            disabled={Boolean(activeJobId) || submitting}
-            readOnly={isGuidedDemo}
-            style={{ minHeight: 64 }}
-          />
-        </div>
-        {!isGuidedDemo && errorText && <div className="formal-ai-error">{errorText}</div>}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="submit"
-            className="app-btn-primary"
-            disabled={!draft.trim() || submitting || Boolean(activeJobId) || (isGuidedDemo && (!hasRequiredBinding || demoFlowComplete))}
-            style={{ padding: '8px 14px', fontSize: 13 }}
+            className="app-btn-primary formal-ai-decision-footer__action"
+            disabled={
+              !selectedDemoBranchChoice ||
+              !draft.trim() ||
+              !hasRequiredBinding ||
+              submitting ||
+              Boolean(activeJobId)
+            }
           >
-            <Send size={15} strokeWidth={1.5} aria-hidden="true" />
-            {submitting ? '正在发送' : '发送'}
+            {submitting ? '正在确认' : '确认并继续'}
+            <ChevronRight size={15} strokeWidth={1.5} aria-hidden="true" />
           </button>
-        </div>
-      </form>
+        </form>
+      ) : isGuidedDemo && demoFlowComplete ? (
+        <section className="formal-ai-complete-action" role="status" aria-live="polite">
+          <div className="formal-ai-complete-action__copy">
+            <CheckCircle2 size={18} strokeWidth={1.5} aria-hidden="true" />
+            <div>
+              <strong>{demoStepTotal} 项关键判断已完成</strong>
+              <p>处理路线已经更新到需求地图，可以查看本轮整理结果。</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="app-btn-primary formal-ai-complete-action__button"
+            onClick={onOpenReport}
+            disabled={!onOpenReport}
+          >
+            <FileText size={15} strokeWidth={1.5} aria-hidden="true" />
+            查看本轮报告
+          </button>
+        </section>
+      ) : (
+        <form
+          style={{
+            flexShrink: 0,
+            borderTop: '1px solid var(--aurora-hair)',
+            padding: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+          onSubmit={(event) => void submit(event)}
+        >
+          {!isGuidedDemo && formalGuidanceState && (
+            <div
+              className={`formal-ai-guidance-state ${formalReviewReady ? 'is-ready' : 'is-eliciting'}`}
+              role="status"
+              aria-live="polite"
+            >
+              {formalReviewReady
+                ? <CheckCircle2 size={17} strokeWidth={1.5} aria-hidden="true" />
+                : <Circle size={17} strokeWidth={1.5} aria-hidden="true" />}
+              <div>
+                <strong>
+                  {formalReviewReady
+                    ? '本轮关键模块已覆盖'
+                    : `已覆盖 ${formalGuidanceState.coveredModuleCount} / ${formalGuidanceState.totalModuleCount} 个关键模块`}
+                </strong>
+                <p>
+                  {formalReviewReady
+                    ? '可以复核本轮报告；项目没有固定轮数，仍可选择节点继续补充。'
+                    : `还有 ${formalGuidanceState.unresolvedCount} 项关键问题，系统会按缺口继续追问。`}
+                </p>
+              </div>
+              {formalReviewReady && (
+                <button type="button" onClick={onOpenReport} disabled={!onOpenReport}>
+                  <FileText size={14} strokeWidth={1.5} aria-hidden="true" />
+                  查看报告
+                </button>
+              )}
+            </div>
+          )}
+          {isGuidedDemo && (
+            <div className="formal-ai-demo-guide" role="note">
+              <span>先在「{activeModule?.title ?? '当前节点'}」点击“加入对话”，再填入本步回答。</span>
+              <button
+                type="button"
+                className="app-chip app-chip-sage"
+                onClick={fillDemoAnswer}
+                disabled={Boolean(activeJobId) || submitting || !hasRequiredBinding}
+              >
+                填入回答
+              </button>
+            </div>
+          )}
+          {isGuidedDemo && (demoNotice || errorText) && (
+            <div className="formal-ai-demo-notice" role="status" aria-live="polite">
+              {errorText || demoNotice}
+            </div>
+          )}
+          <div className="inline-composer-field" style={{ minHeight: 88 }}>
+            {bindings.length > 0 && (
+              <div className="inline-composer-reference-strip" aria-label="已加入对话的节点">
+                {bindings.map((binding) => (
+                <span
+                  key={binding.id}
+                  className="inline-reference-token"
+                  title={`${binding.title} · ${binding.detail}`}
+                >
+                  <Sparkles className="h-3 w-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+                  <span className="inline-reference-token__label">{binding.title}</span>
+                  <button
+                    type="button"
+                    aria-label={`移除 ${binding.title}`}
+                    className="inline-reference-token__remove"
+                    onClick={() => removeBinding(binding.id)}
+                  >
+                    <X className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                </span>
+                ))}
+              </div>
+            )}
+            <textarea
+              className={`app-textarea inline-composer-textarea ${isGuidedDemo ? 'inline-composer-textarea--locked' : ''}`}
+              value={draft}
+              onChange={(event) => {
+                if (isGuidedDemo) return;
+                setDraft(event.target.value);
+              }}
+              placeholder={activeJobId
+                ? '正在更新地图，请稍候。'
+                : isGuidedDemo
+                  ? `先在「${activeModule?.title ?? '当前节点'}」点击“加入对话”，再点击“填入回答”。`
+                  : formalReviewReady
+                    ? '继续补充信息，或从需求地图加入想深入的节点。'
+                    : '回答当前问题；也可以先从需求地图加入节点。'}
+              rows={3}
+              disabled={Boolean(activeJobId) || submitting}
+              readOnly={isGuidedDemo}
+              style={{ minHeight: 64 }}
+            />
+          </div>
+          {!isGuidedDemo && errorText && <div className="formal-ai-error">{errorText}</div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="submit"
+              className="app-btn-primary"
+              disabled={
+                !draft.trim() ||
+                submitting ||
+                Boolean(activeJobId) ||
+                (isGuidedDemo && !hasRequiredBinding)
+              }
+              style={{ padding: '8px 14px', fontSize: 13 }}
+            >
+              <Send size={15} strokeWidth={1.5} aria-hidden="true" />
+              {submitting ? '正在发送' : formalReviewReady ? '发送补充' : '发送'}
+            </button>
+          </div>
+        </form>
+      )}
     </aside>
+      <ModelUnavailableDialog
+        open={modelDialogOpen}
+        title="暂时不能继续追问"
+        description="当前模型服务不可用，暂时不能继续整理需求地图。你已填写的内容会保留，服务恢复后可以直接重试。"
+        onDismiss={dismissModelDialog}
+      />
+    </>
+  );
+}
+
+function DemoBranchDecision({
+  step,
+  selectedChoiceId,
+  stepNumber,
+  stepTotal,
+  onSelect,
+}: {
+  step: FormalDemoBranchStep;
+  selectedChoiceId?: string | null;
+  stepNumber: number;
+  stepTotal: number;
+  onSelect: (choice: FormalDemoBranchChoice) => void;
+}) {
+  return (
+    <section
+      className="formal-ai-branch-decision page-motion-stage"
+      data-branch-case={step.id.split('_')[0]}
+      aria-label="当前处理方向"
+    >
+      <div className="formal-ai-branch-decision__head">
+        <span className="app-label">
+          <GitBranch size={13} strokeWidth={1.5} aria-hidden="true" />
+          关键判断 {stepNumber} / {stepTotal}
+        </span>
+        <strong>选择处理方向</strong>
+        <p>{step.context}</p>
+      </div>
+      <div className="formal-ai-branch-decision__choices" role="group" aria-label={step.prompt}>
+        {step.choices.map((choice) => {
+          const selected = choice.id === selectedChoiceId;
+          return (
+            <button
+              key={choice.id}
+              type="button"
+              className={`formal-ai-branch-choice ${selected ? 'is-selected' : ''}`}
+              aria-pressed={selected}
+              data-branch-choice={choice.id}
+              onClick={() => onSelect(choice)}
+            >
+              <span className="formal-ai-branch-choice__main">
+                <span className="formal-ai-branch-choice__indicator" aria-hidden="true">
+                  {selected
+                    ? <CheckCircle2 size={17} strokeWidth={1.7} />
+                    : <Circle size={17} strokeWidth={1.5} />}
+                </span>
+                <span className="formal-ai-branch-choice__copy">
+                  <strong>{choice.title}</strong>
+                  <small>{choice.consequence}</small>
+                </span>
+                <em>{choice.routeLabel}</em>
+              </span>
+              <span className="formal-ai-branch-choice__action">
+                {selected ? '已选择' : '选择此方向'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -477,26 +733,32 @@ function FormalAiContextCard({
   module,
   activeJobId,
   hasUserMessage,
+  questionOverride,
+  reviewReady = false,
 }: {
   module: QuickDemoGuidanceModule;
   activeJobId?: string | null;
   hasUserMessage: boolean;
+  questionOverride?: string;
+  reviewReady?: boolean;
 }) {
-  const firstQuestion = module.questions[0] ?? '当前节点暂无待确认问题。';
+  const firstQuestion = questionOverride ?? module.questions[0] ?? '当前节点暂无待确认问题。';
 
   return (
     <section className="formal-ai-context-card" aria-label="当前地图节点">
       <div className="app-label">当前节点</div>
       <h2>{module.title}</h2>
       <p>{module.summary}</p>
-      <div className="formal-ai-context-card__question">
+      <div className="formal-ai-context-card__question page-motion-question">
         <Sparkles size={14} strokeWidth={1.5} aria-hidden="true" />
         <span>
           {activeJobId
             ? hasUserMessage
               ? '正在根据你的回答更新当前节点。'
               : '正在根据项目说明生成当前节点。'
-            : `当前追问：${firstQuestion}`}
+            : reviewReady
+              ? '本轮状态：关键问题已覆盖，仍可继续补充。'
+              : `当前追问：${firstQuestion}`}
         </span>
       </div>
       <div className="formal-ai-context-card__mini">
@@ -550,7 +812,7 @@ function FormalMessageBubble({ message }: { message: FormalMapMessage }) {
             <span
               key={binding.id}
               className="inline-message-reference-token"
-              title={`${binding.title} · ${binding.detail}`}
+              title={binding.detail ? `${binding.title} · ${binding.detail}` : binding.title}
             >
               <Sparkles className="h-3 w-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
               <span className="inline-reference-token__label">{binding.title}</span>

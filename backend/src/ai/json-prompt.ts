@@ -269,7 +269,8 @@ function taskInstructionFor(taskType: string): string {
         '- 用户可能在做活动策划、学术写作、外包采购、服务流程、软件产品或其他项目；请先判断主题，再选择合适模块。',
         '- 模块标题必须是普通中文用户能理解的表达，例如“活动目标”“受众与触达”“范围与排除项”“验收与交付”，不要写 agent、skill、slot、schema、blocking。',
         '- 已明确内容只能来自输入或对话；合理推测放到 assumptions；缺口放到 questions/unresolvedItems。',
-        '- nextQuestion 必须是一个具体、自然、有优先级的问题，不能让用户自己补完整需求。',
+        '- 仍有关键缺口时，nextQuestion 必须是一个具体、自然、有优先级的问题，不能让用户自己补完整需求；本轮关键问题全部覆盖时返回 null。',
+        '- 提问数量由模块缺口决定，不以固定轮数结束；一次只追问当前影响最大的一个问题。',
         '- overview 面向普通用户；detailedReport 用专业需求分析报告结构，能指导后续执行。',
         '- 不要输出正式批准、最终决策、已基线化、已验收等结论。',
       ].join('\n');

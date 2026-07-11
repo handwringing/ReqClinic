@@ -8,6 +8,10 @@ interface ModelHealth {
   };
 }
 
+const MODEL_ACCESS_CACHE_MS = 5_000;
+let modelAccessCache: { value: boolean; checkedAt: number } | null = null;
+let modelAccessRequest: Promise<boolean> | null = null;
+
 export function looksLikeRequirementInput(value: string): boolean {
   const text = value.trim();
   if (!text) return false;
@@ -26,7 +30,7 @@ function backendRootUrl(): string | null {
   return baseUrl.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
 }
 
-export async function hasModelApiAccess(): Promise<boolean> {
+async function requestModelApiAccess(): Promise<boolean> {
   const rootUrl = backendRootUrl();
   if (!rootUrl) return false;
   try {
@@ -40,4 +44,25 @@ export async function hasModelApiAccess(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function hasModelApiAccess(): Promise<boolean> {
+  const now = Date.now();
+  if (modelAccessCache && now - modelAccessCache.checkedAt < MODEL_ACCESS_CACHE_MS) {
+    return modelAccessCache.value;
+  }
+  if (modelAccessRequest) return modelAccessRequest;
+
+  modelAccessRequest = requestModelApiAccess();
+  try {
+    const value = await modelAccessRequest;
+    modelAccessCache = { value, checkedAt: Date.now() };
+    return value;
+  } finally {
+    modelAccessRequest = null;
+  }
+}
+
+export function warmModelApiAccess(): void {
+  void hasModelApiAccess();
 }

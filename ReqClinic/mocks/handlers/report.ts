@@ -170,7 +170,7 @@ export function registerReportHandlers(registry: MockRouteRegistry, store: MockS
   );
 
   registry.register('downloadReport', async (request: { id: UUID; format: string }) => {
-    const content = `# Aster 访客通行需求报告（${request.format.toUpperCase()}）\n报告 ID：${request.id}\n由 ReqClinic Mock 生成。`;
+    const content = `# Aster 访客通行需求报告（${request.format.toUpperCase()}）\n报告 ID：${request.id}\n由需求问诊室生成。`;
     const encoded =
       typeof btoa !== 'undefined'
         ? btoa(unescape(encodeURIComponent(content)))
@@ -179,7 +179,7 @@ export function registerReportHandlers(registry: MockRouteRegistry, store: MockS
   });
 
   registry.register('downloadProjectReport', async (request: { project_id: UUID; report_id: UUID }) => {
-    const content = `# 项目 ${request.project_id} 需求报告\n报告 ID：${request.report_id}\n由 ReqClinic Mock 生成。`;
+    const content = `# 项目 ${request.project_id} 需求报告\n报告 ID：${request.report_id}\n由需求问诊室生成。`;
     const encoded =
       typeof btoa !== 'undefined'
         ? btoa(unescape(encodeURIComponent(content)))

@@ -1023,6 +1023,12 @@ export function registerQuickRoutes(
       const repoActor = toRepoActor(ctx.actor);
       const session = quickSessionRepo.findByIdForActor(ctx.params.id, repoActor);
       const body = validateBody(upgradeSchema, ctx.body);
+      if (session.sourceKind === 'sample') {
+        throw ApiError.conflict(
+          'SAMPLE_UPGRADE_UNSUPPORTED',
+          '参考案例不支持直接升级，请从正式项目入口新建项目。',
+        );
+      }
       const userId = await resolveFormalUserId(ctx, {
         userRepo: deps.userRepo ?? new UserRepo(ctx.db.db),
         agreementRepo: deps.agreementRepo,

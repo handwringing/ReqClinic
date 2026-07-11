@@ -46,7 +46,7 @@ export function BriefTopbar({
 }: BriefTopbarProps) {
   const router = useRouter();
   const isDraft = status === 'draft';
-  const upgradeLabel = '升级正式项目';
+  const upgradeLabel = isSampleSession ? '体验正式项目' : '升级正式项目';
   const pendingLabel = '正在升级';
 
   return (

@@ -85,7 +85,7 @@ export function ExampleCards({ selectedMode, onSelectMode }: ExampleCardsProps) 
           <Link
             key={card.num}
             href={card.href}
-            prefetch={false}
+            prefetch
             onClick={() => onSelectMode?.(card.mode)}
             className="ex-card"
             style={

@@ -132,7 +132,8 @@ function buildFallbackSnapshot(input: FormalRuntimeInput): FormalMapSnapshotOutp
     input.turns,
   );
   const currentModule = chooseCurrentModule(modules, input.turns);
-  const nextQuestion = currentModule.questions[0] ?? '这部分目前最需要谁来确认？';
+  const nextQuestion = nextQuestionFromModules(modules);
+  const guidanceState = deriveGuidanceState(modules);
   const summary = summarizeInput(input);
   return formalMapSnapshotSchema.parse({
     result_type: 'formal_map_snapshot',
@@ -145,12 +146,8 @@ function buildFallbackSnapshot(input: FormalRuntimeInput): FormalMapSnapshotOutp
         : '来自项目初始说明，后续由问诊继续补齐。',
     currentModuleId: currentModule.id,
     nextQuestion,
-    generationSteps: [
-      { label: '整理起点', state: 'done' },
-      { label: '划分模块', state: 'done' },
-      { label: '继续追问', state: 'active' },
-      { label: '生成报告', state: input.turns.length >= 4 ? 'active' : 'pending' },
-    ],
+    guidanceState,
+    generationSteps: buildGenerationSteps(guidanceState),
     modules,
     unresolvedItems: unresolvedFromModules(modules),
     reportProjection: buildReportProjection(input, modules, summary, nextQuestion),
@@ -607,6 +604,43 @@ function chooseCurrentModule(
   return firstWithQuestions ?? modules[0];
 }
 
+function nextQuestionFromModules(modules: FormalMapModule[]): string | null {
+  return modules.find((item) => item.questions.length > 0 && item.status !== '已整理')?.questions[0]
+    ?? modules.find((item) => item.questions.length > 0)?.questions[0]
+    ?? null;
+}
+
+function deriveGuidanceState(modules: FormalMapModule[]): FormalMapSnapshotOutput['guidanceState'] {
+  const totalModuleCount = Math.max(1, modules.length);
+  const unresolvedCount = modules.reduce((sum, item) => sum + item.questions.length, 0);
+  const coveredModuleCount = modules.filter((item) => item.questions.length === 0).length;
+  const reportReady = unresolvedCount === 0 && modules.length > 0;
+  return {
+    status: reportReady ? 'review_ready' : 'eliciting',
+    coveredModuleCount,
+    totalModuleCount,
+    unresolvedCount,
+    reportReady,
+    completionReason: reportReady
+      ? '需求地图的关键模块已完成本轮确认，可以进入报告复核；后续仍可继续补充。'
+      : null,
+  };
+}
+
+function buildGenerationSteps(
+  guidanceState: FormalMapSnapshotOutput['guidanceState'],
+): FormalMapSnapshotOutput['generationSteps'] {
+  return [
+    { label: '整理起点', state: 'done' },
+    { label: '划分模块', state: 'done' },
+    { label: '继续追问', state: guidanceState.reportReady ? 'done' : 'active' },
+    {
+      label: '复核本轮报告',
+      state: guidanceState.reportReady ? 'active' : 'pending',
+    },
+  ];
+}
+
 function applyTurnAnswersToModules(
   modules: FormalMapModule[],
   turns: FormalRuntimeInput['turns'],
@@ -716,13 +750,16 @@ function reconcileSnapshotWithTurns(
 ): FormalMapSnapshotOutput {
   const modules = applyTurnAnswersToModules(snapshot.modules, input.turns);
   const currentModule = chooseCurrentModule(modules, input.turns);
-  const nextQuestion = currentModule.questions[0] ?? '这部分目前还有哪一点需要负责人最后确认？';
+  const nextQuestion = nextQuestionFromModules(modules);
+  const guidanceState = deriveGuidanceState(modules);
   const summary = summarizeInput(input);
   return formalMapSnapshotSchema.parse({
     ...snapshot,
     modules,
     currentModuleId: currentModule.id,
     nextQuestion,
+    guidanceState,
+    generationSteps: buildGenerationSteps(guidanceState),
     unresolvedItems: unresolvedFromModules(modules),
     reportProjection: buildReportProjection(input, modules, summary, nextQuestion),
   });
@@ -812,7 +849,7 @@ function buildReportProjection(
   input: FormalRuntimeInput,
   modules: FormalMapModule[],
   summary: string,
-  nextQuestion: string,
+  nextQuestion: string | null,
 ): FormalMapSnapshotOutput['reportProjection'] {
   const confirmed = buildConfirmedReportSection(input, modules);
   const assumptions = modules.flatMap((item) => item.assumptions.map((assumption) => `- ${item.title}：${assumption}`)).join('\n') || '- 暂无系统推测。';
@@ -832,7 +869,9 @@ function buildReportProjection(
     overview: [
       summary,
       `当前更适合先围绕“${modules[0]?.title ?? '项目目标'}”和“${modules[1]?.title ?? '范围'}”继续确认。`,
-      `下一步建议先回答：${nextQuestion}`,
+      nextQuestion
+        ? `下一步建议先回答：${nextQuestion}`
+        : '本轮关键模块已经覆盖，可以进入报告复核；仍可选择任一地图节点继续补充。',
     ].join('\n\n'),
     detailedReport: [
       '# 正式项目需求分析报告',
@@ -871,7 +910,9 @@ function buildReportProjection(
       '',
       '## 7. 建议下一步',
       '',
-      `先回答当前最高优先级问题：${nextQuestion}`,
+      nextQuestion
+        ? `先回答当前最高优先级问题：${nextQuestion}`
+        : '复核本轮报告中的已明确内容和待确认项；如有新信息，可继续选择地图节点补充。',
       '',
       '## 8. 版本说明',
       '',
@@ -1003,7 +1044,12 @@ function mergeWithFallback(
     title: modelDrifted || hasDeveloperTerms(model.title) ? fallback.title : sanitizeUserVisibleText(model.title),
     summary: modelDrifted || hasDeveloperTerms(model.summary) ? fallback.summary : sanitizeUserVisibleText(model.summary),
     currentModuleId,
-    nextQuestion: modelDrifted || hasDeveloperTerms(model.nextQuestion) ? fallback.nextQuestion : sanitizeUserVisibleText(model.nextQuestion),
+    nextQuestion:
+      modelDrifted || (model.nextQuestion !== null && hasDeveloperTerms(model.nextQuestion))
+        ? fallback.nextQuestion
+        : model.nextQuestion === null
+          ? null
+          : sanitizeUserVisibleText(model.nextQuestion),
     modules,
     unresolvedItems: modelDrifted ? fallback.unresolvedItems : model.unresolvedItems.length ? model.unresolvedItems : fallback.unresolvedItems,
     reportProjection: {

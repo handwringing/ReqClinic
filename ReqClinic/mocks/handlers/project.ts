@@ -121,14 +121,14 @@ function resolveProject(store: MockSessionStore, projectId: string): Project | n
   return staticProject(projectId);
 }
 
-function buildMockFormalMap(project: Project): FormalMapData {
+function buildMockFormalMap(project: Project, messages: FormalMapMessage[] = []): FormalMapData {
   const title = project.title || '正式项目示例';
   const sourceContext =
     project.source_kind === 'quick_upgrade'
-      ? '来自快速问诊升级，已保留示例回答作为初始上下文'
+      ? '已承接快速问诊中的关键信息，并把它们作为本轮确认起点'
       : project.source_kind === 'sample'
-        ? '来自参考案例，使用 mock 数据演示正式项目问诊'
-        : '来自自定义项目，使用 mock 数据演示正式项目问诊';
+        ? '已根据当前案例整理首轮需求地图，待确认内容会随问答继续更新'
+        : '已根据当前项目信息整理首轮需求地图，待确认内容会随问答继续更新';
   const modules: FormalMapData['modules'] = [
     {
       id: 'goal',
@@ -166,6 +166,26 @@ function buildMockFormalMap(project: Project): FormalMapData {
       relatedModuleIds: ['goal', 'risk'],
     },
     {
+      id: 'users',
+      title: '使用对象与关键场景',
+      status: '待补充',
+      summary: '确认谁在什么场景下使用，以及一次关键任务如何开始和结束。',
+      known: ['正式项目需要区分直接使用者、决策者和受影响的人。'],
+      assumptions: ['不同角色的核心场景和成功判断可能不同。'],
+      questions: ['最关键的使用对象是谁，他们要完成哪一件核心任务？'],
+      relatedModuleIds: ['goal', 'workflow'],
+    },
+    {
+      id: 'workflow',
+      title: '核心流程与异常',
+      status: '待补充',
+      summary: '把正常流程、异常分支、人工兜底和结束记录连成完整闭环。',
+      known: ['主流程和异常处理需要使用同一套责任与记录口径。'],
+      assumptions: ['至少有一个高频异常会影响首版范围。'],
+      questions: ['核心流程最容易在哪一步中断，失败后怎样继续？'],
+      relatedModuleIds: ['users', 'roles'],
+    },
+    {
       id: 'roles',
       title: '角色与责任',
       status: '建议确认',
@@ -188,7 +208,7 @@ function buildMockFormalMap(project: Project): FormalMapData {
     {
       id: 'report',
       title: '报告与版本',
-      status: '已整理',
+      status: '待补充',
       summary: '把当前结论、待确认项和下一步动作投射到需求报告。',
       known: ['报告需要区分已明确、假设和待确认。'],
       assumptions: ['每次确认后都应更新地图和报告草稿。'],
@@ -196,55 +216,104 @@ function buildMockFormalMap(project: Project): FormalMapData {
       relatedModuleIds: ['goal', 'risk'],
     },
   ];
+  for (const message of messages) {
+    if (message.role !== 'user') continue;
+    const referencedModule = message.bound_refs
+      .map((ref) => modules.find((module) => module.id === ref.id || module.title === ref.title))
+      .find((module): module is FormalMapData['modules'][number] => Boolean(module));
+    const target = referencedModule
+      ?? modules.find((module) => module.questions.length > 0)
+      ?? modules[modules.length - 1];
+    if (!target) continue;
+    const answer = message.content.trim();
+    if (answer && !target.known.some((item) => item.includes(answer))) {
+      target.known = [...target.known, `用户补充：${answer}`];
+    }
+    target.questions = target.questions.slice(1);
+    target.status = target.questions.length === 0 ? '已整理' : '正在梳理';
+  }
+  const unresolvedItems = modules.flatMap((module) =>
+    module.questions.map((question) => ({
+      id: `${module.id}_q`,
+      label: module.title,
+      detail: question,
+      impact: module.id === 'goal' ? '影响验收标准和后续范围判断' : '影响正式报告的完整度',
+    }))
+  );
+  const currentModule = modules.find((module) => module.questions.length > 0) ?? modules[modules.length - 1];
+  const nextQuestion = currentModule?.questions[0] ?? null;
+  const coveredModuleCount = modules.filter((module) => module.questions.length === 0).length;
+  const reportReady = unresolvedItems.length === 0;
+  const userUpdates = modules.flatMap((module) =>
+    module.known
+      .filter((item) => item.startsWith('用户补充：'))
+      .map((item) => `- ${module.title}：${item.slice('用户补充：'.length)}`)
+  );
   return {
     result_type: 'formal_map_snapshot',
     title: `${title}需求地图`,
-    summary: `${title}已进入正式项目问诊。当前最需要先确认目标责任人与验收成功标准。`,
+    summary: reportReady
+      ? `${title}的关键模块已完成本轮确认，可以进入报告复核；后续仍可继续补充。`
+      : `${title}已进入正式项目问诊。系统会按地图缺口继续追问，不以固定轮数结束。`,
     projectType: 'formal_project',
     sourceContext,
-    currentModuleId: 'goal',
-    nextQuestion: modules[0]?.questions[0] ?? '请先补充最关键的验收标准。',
+    currentModuleId: currentModule?.id ?? 'goal',
+    nextQuestion,
+    guidanceState: {
+      status: reportReady ? 'review_ready' : 'eliciting',
+      coveredModuleCount,
+      totalModuleCount: modules.length,
+      unresolvedCount: unresolvedItems.length,
+      reportReady,
+      completionReason: reportReady
+        ? '需求地图的关键模块已完成本轮确认，可以进入报告复核；后续仍可继续补充。'
+        : null,
+    },
     generationSteps: [
       { label: '读取项目上下文', state: 'done' },
       { label: '生成需求地图', state: 'done' },
-      { label: '提出第一轮追问', state: 'active' },
+      { label: '继续追问', state: reportReady ? 'done' : 'active' },
+      { label: '复核本轮报告', state: reportReady ? 'active' : 'pending' },
     ],
     modules,
-    unresolvedItems: modules.flatMap((module) =>
-      module.questions.map((question) => ({
-        id: `${module.id}_q`,
-        label: module.title,
-        detail: question,
-        impact: module.id === 'goal' ? '影响验收标准和后续范围判断' : '影响正式报告的完整度',
-      }))
-    ),
+    unresolvedItems,
     reportProjection: {
-      overview: `${title}已经形成初版需求地图，下一步应围绕目标、范围、角色和风险逐项确认。`,
+      overview: reportReady
+        ? `${title}的本轮需求地图已经覆盖目标、对象、范围、流程、责任、风险和报告用途。`
+        : `${title}已经形成初版需求地图，下一步会根据尚未覆盖的模块逐项确认。`,
       detailedReport: [
         `# ${title}需求报告草稿`,
         '',
         '## 当前结论',
-        '- 已完成正式项目地图初始化。',
-        '- 当前优先追问目标确认人与成功标准。',
+        `- 已覆盖 ${coveredModuleCount} / ${modules.length} 个关键模块。`,
+        reportReady ? '- 本轮关键问题已覆盖，可以开始复核。' : `- 当前优先确认：${nextQuestion ?? '暂无'}`,
+        '',
+        '## 已记录补充',
+        ...(userUpdates.length > 0 ? userUpdates : ['- 暂无补充。']),
         '',
         '## 待确认问题',
-        ...modules.map((module) => `- ${module.title}：${module.questions[0] ?? '暂无'}`),
+        ...(unresolvedItems.length > 0
+          ? unresolvedItems.map((item) => `- ${item.label}：${item.detail}`)
+          : ['- 本轮暂无未解决的关键问题；后续补充会继续更新报告。']),
       ].join('\n'),
     },
-    qualityNotes: ['mock 正式问诊会保留 AI 提问、用户回答和报告投射，便于验证完整流程。'],
+    qualityNotes: ['当前问答、整理结果和报告中的关键信息保持一致。'],
   };
 }
 
 function buildFormalMapResponse(store: MockSessionStore, project: Project): FormalMapResponse {
-  const map = buildMockFormalMap(project);
   let messages = getFormalMapMessages(store, project.id);
+  const map = buildMockFormalMap(project, messages);
   if (messages.length === 0) {
+    if (!map.nextQuestion) {
+      throw new ApiClientError(500, 'INTERNAL_ERROR', '正式项目缺少首个问题', generateUUID());
+    }
     messages = [
       {
         id: generateUUID(),
         project_id: project.id,
         role: 'assistant',
-        content: `问诊助手先问：${map.nextQuestion}`,
+          content: map.nextQuestion,
         message_type: 'question',
         bound_refs: [{ id: map.currentModuleId, title: '目标与成功标准', kind: 'map_node' }],
         created_at: new Date().toISOString(),
@@ -328,30 +397,40 @@ export function registerProjectHandlers(registry: MockRouteRegistry, store: Mock
       if (!project) {
         throw new ApiClientError(404, 'NOT_FOUND', '项目不存在', generateUUID());
       }
-      const map = buildMockFormalMap(project);
       const now = new Date().toISOString();
       const currentMessages = getFormalMapMessages(store, project.id);
-      const nextMessages: FormalMapMessage[] = [
-        ...currentMessages,
-        {
-          id: generateUUID(),
-          project_id: project.id,
-          role: 'user',
-          content: request.content,
-          message_type: 'answer',
-          bound_refs: request.bound_refs ?? [],
-          created_at: now,
-        },
-        {
-          id: generateUUID(),
-          project_id: project.id,
-          role: 'assistant',
-          content: `已记录。下一步先确认：${map.nextQuestion}`,
-          message_type: 'question',
-          bound_refs: [{ id: map.currentModuleId, title: '目标与成功标准', kind: 'map_node' }],
-          created_at: now,
-        },
-      ];
+      const userMessage: FormalMapMessage = {
+        id: generateUUID(),
+        project_id: project.id,
+        role: 'user',
+        content: request.content,
+        message_type: 'answer',
+        bound_refs: request.bound_refs ?? [],
+        created_at: now,
+      };
+      const map = buildMockFormalMap(project, [...currentMessages, userMessage]);
+      const nextModule = map.modules.find((module) => module.id === map.currentModuleId);
+      const assistantMessage: FormalMapMessage = map.nextQuestion
+        ? {
+            id: generateUUID(),
+            project_id: project.id,
+            role: 'assistant',
+            content: map.nextQuestion,
+            message_type: 'question',
+            bound_refs: [{ id: map.currentModuleId, title: nextModule?.title ?? '当前节点', kind: 'map_node' }],
+            created_at: now,
+          }
+        : {
+            id: generateUUID(),
+            project_id: project.id,
+            role: 'assistant',
+            content: map.guidanceState.completionReason
+              ?? '本轮关键模块已经覆盖，可以复核报告；后续仍可继续补充。',
+            message_type: 'status',
+            bound_refs: [],
+            created_at: now,
+          };
+      const nextMessages: FormalMapMessage[] = [...currentMessages, userMessage, assistantMessage];
       setFormalMapMessages(store, project.id, nextMessages);
       return { job_id: generateUUID(), status: 'accepted' as const };
     },
